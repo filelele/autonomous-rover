@@ -2,7 +2,7 @@
 Autonomous chassis rover powered by AI
 
 # Block Diagram
-![Block Diagram](document/block_diagram.svg)
+![Block Diagram](diagrams/block_diagram.svg)
 
 # Wiring schematic
-![Wiring Schematic](document/wiring_schematic.svg)
+![Wiring Schematic](diagrams/wiring_schematic.svg)
