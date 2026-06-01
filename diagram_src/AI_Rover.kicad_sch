@@ -3087,6 +3087,10 @@
 		(uuid "0c2941fd-0210-4556-97b9-3c7e90d505aa")
 	)
 	(no_connect
+		(at 83.82 120.65)
+		(uuid "0ef94510-8b53-4af4-96ca-f3f7a45a9f88")
+	)
+	(no_connect
 		(at 83.82 110.49)
 		(uuid "12790316-f091-4762-bc09-71ec7b516f22")
 	)
@@ -3209,16 +3213,6 @@
 	(no_connect
 		(at 83.82 115.57)
 		(uuid "f571b6d4-8422-48eb-b2d0-f8dd2d935e90")
-	)
-	(wire
-		(pts
-			(xy 80.01 120.65) (xy 83.82 120.65)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "043cb732-e122-41ec-8400-12f8566dd4c7")
 	)
 	(wire
 		(pts
@@ -3870,16 +3864,6 @@
 		)
 		(uuid "ffca08a4-06d8-4fa5-818e-2ac5d473c00f")
 	)
-	(label "GND_IMU"
-		(at 80.01 120.65 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "034f5ff7-b88e-4a56-bee1-e71c49905c84")
-	)
 	(label "GND_PERIPHERALS"
 		(at 100.33 95.25 0)
 		(effects
@@ -3890,7 +3874,7 @@
 		)
 		(uuid "0565d068-5bc2-46d0-ad83-b895e2f95866")
 	)
-	(label "R_PWM_LEFT"
+	(label "L_PWM_LEFT"
 		(at 80.01 130.81 180)
 		(effects
 			(font
@@ -4220,7 +4204,7 @@
 		)
 		(uuid "7b0a33cf-14fe-4261-96e6-80b2e85f5991")
 	)
-	(label "L_PWM_LEFT"
+	(label "L_EN_LEFT"
 		(at 80.01 133.35 180)
 		(effects
 			(font
@@ -4280,7 +4264,7 @@
 		)
 		(uuid "90572a78-6116-4595-9a8e-fd8c2e5797c4")
 	)
-	(label "L_EN_LEFT"
+	(label "R_PWM_LEFT"
 		(at 80.01 128.27 180)
 		(effects
 			(font
