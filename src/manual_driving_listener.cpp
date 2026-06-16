@@ -6,6 +6,10 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+
 
 struct DutyCycleController duty_cycle_controller = initialize_motors();
 
@@ -44,6 +48,39 @@ void speed_to_duty_cycle(DutyCycleController& duty_cycle_controller,
 	duty_cycle_controller.right << static_cast<long>(right_mul*MAX_DUTY_CYCLE_FRACTION*PERIOD) << std::flush;
 }
 
+class UDPServer {
+private:
+    int sockfd;
+public:
+    UDPServer(int port) {
+        sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+        
+        // Cấu hình socket Non-blocking (Không làm đứng vòng lặp)
+        int flags = fcntl(sockfd, F_GETFL, 0);
+        fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+
+        sockaddr_in servaddr{};
+        servaddr.sin_family = AF_INET;
+        servaddr.sin_addr.s_addr = INADDR_ANY;
+        servaddr.sin_port = htons(port);
+
+        bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr));
+    }
+
+    bool receive_target(float &heading, float &angle) {
+        char buffer[64];
+        int n = recvfrom(sockfd, buffer, sizeof(buffer)-1, 0, nullptr, nullptr);
+        if (n > 0) {
+            buffer[n] = '\0';
+            sscanf(buffer, "%f,%f", &heading, &angle);
+            return true;
+        }
+        return false;
+    }
+
+    ~UDPServer() { close(sockfd); }
+};
+
 class Keyboard{
 
 private:
@@ -62,7 +99,6 @@ public:
 		tcsetattr(STDIN_FILENO, TCSANOW, &raw_termios);
 	}
 
-	//check if there is anything in keyboard
 	bool is_there_keypress(){
 		struct timeval tv = {0L, 0L};
 		fd_set fds;
@@ -91,6 +127,7 @@ public:
 };
 
 int main(){
+
 	float current_heading = 0.0f;
 	float current_angle = 0.0f;
 
@@ -103,43 +140,23 @@ int main(){
 	const float ALPHA_HEADING = 0.15f;
 	const float ALPHA_ANGLE = 0.25f;
 
-	auto last_keypress_time = std::chrono::steady_clock::now();
-	const std::chrono::milliseconds KEY_TIMEOUT(600);
+	auto last_packet_time = std::chrono::steady_clock::now();
+	const std::chrono::milliseconds NETWORK_TIMEOUT(600);
 	
-	Keyboard keyboard;
-	keyboard.init_non_blocking();
-
+	//Keyboard keyboard;
+	//keyboard.init_non_blocking();
+	UDPServer udp(12345);
+	
 	while(true){
-		if(keyboard.is_there_keypress()){
-			char key = keyboard.get_latest_key();
-			if(key != 0){
-				if(key == 'q') break;
-				if (key == 'w' || key == 'a' || key == 's' || key == 'd') {
-					last_keypress_time = std::chrono::steady_clock::now();
-					switch(key){
-	                                case 'w': 
-	                                        target_heading = TARGET_FORWARD_SPEED;
-	                                        target_angle = 0.0f; 
-	                                        break;
-	                                case 'a': 
-	                                        target_angle = -TARGET_ANGLE_SPEED;
-	                                        target_heading = 0;
-	                                        break;
-	                                case 'd': 
-	                                        target_angle = TARGET_ANGLE_SPEED;
-	                                        target_heading = 0; 
-	                                        break;
-	                                case 's': //hard break
-	                                        target_heading = 0.0f;
-	                                        target_angle = 0.0f;
-	                                        break;
-	                        	}
+		float recv_heading = 0, recv_angle = 0;
 
-				}
-			}
-		}
+        if (udp.receive_target(recv_heading, recv_angle)) {
+            target_heading = recv_heading;
+            target_angle = recv_angle;
+            last_packet_time = std::chrono::steady_clock::now();
+        }
 
-		if (std::chrono::steady_clock::now() - last_keypress_time > KEY_TIMEOUT) {
+		if (std::chrono::steady_clock::now() - last_keypress_time > NETWORK_TIMEOUT){
 		            target_heading = 0.0f;
 		            target_angle = 0.0f;
 		}
