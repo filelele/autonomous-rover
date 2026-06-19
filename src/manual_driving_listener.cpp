@@ -10,42 +10,53 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 
-
-struct DutyCycleController duty_cycle_controller = initialize_motors();
-
 const float MAX_DUTY_CYCLE_FRACTION = 0.5f;
 const float ASYMMETRIC_MOTORS_CALIBRATION = 0.9895f;
 
-void speed_to_duty_cycle(DutyCycleController& duty_cycle_controller, 
-						float heading_speed,
-					    float angle_speed){
-	heading_speed = std::max(0.0f, std::min(1.0f, heading_speed));
+MotorsSpeed HighLevelSpeed_to_MotorSpeed(float heading_speed, float angle_speed){
+
+	heading_speed = std::max(-1.0f, std::min(1.0f, heading_speed));
 	angle_speed = std::max(-1.0f, std::min(1.0f, angle_speed));
 
-		
-	float left_mul = heading_speed + angle_speed; //-1,1
-	float right_mul = heading_speed - angle_speed;
+	float left_forward = 0.0;
+	float right_forward = 0.0;
+	float left_reverse = 0.0;
+	float right_reverse = 0.0;		
 
-	
+	if (heading_speed >= 0.0f) {
+        // Forward
+        left_mixed  = heading_speed + angle_speed;
+        right_mixed = heading_speed - angle_speed;
+    } else {
+        // Reverse
+        left_mixed  = heading_speed - angle_speed;
+        right_mixed = heading_speed + angle_speed;
+    }
 
-	if(left_mul < 0){
-		right_mul = std::min(1.0f, right_mul - left_mul);
-		left_mul = 0;
-	}
+	//Normalize to -1 -> 1
+    float max_val = std::max(std::abs(left_mixed), std::abs(right_mixed));
+    if (max_val > 1.0f) {
+        left_mixed /= max_val;
+        right_mixed /= max_val;
+    }
 
-	if(right_mul < 0){
-		left_mul = std::min(1.0f, left_mul - right_mul);
-		right_mul = 0;
-	}
+    if (left_mixed >= 0.0f) {
+        left_forward = left_mixed;
+    } else {
+        left_reverse = std::abs(left_mixed); // Make it a positive fraction [0.0, 1.0]
+    }
 
-	float norm = std::max(left_mul, right_mul);
-	if(norm > 1){
-		left_mul /= norm;
-		right_mul /= norm;
-	}
-	
-	duty_cycle_controller.left << static_cast<long>(left_mul*MAX_DUTY_CYCLE_FRACTION*PERIOD) << std::flush;
-	duty_cycle_controller.right << static_cast<long>(right_mul*MAX_DUTY_CYCLE_FRACTION*PERIOD) << std::flush;
+    if (right_mixed >= 0.0f) {
+        right_forward = right_mixed;
+    } else {
+        right_reverse = std::abs(right_mixed); // Make it a positive fraction [0.0, 1.0]
+    }
+
+    MotorsSpeed output;
+    output.left_forward  = left_forward;
+    output.left_reverse  = left_reverse;
+    output.right_forward = right_forward;
+    output.right_reverse = right_reverse;
 }
 
 class UDPServer {
@@ -81,52 +92,9 @@ public:
     ~UDPServer() { close(sockfd); }
 };
 
-class Keyboard{
-
-private:
-	struct termios orig_termios;
-public:
-	Keyboard(){
-		tcgetattr(STDIN_FILENO, &orig_termios);
-				
-	}
-
-	void init_non_blocking(){
-		struct termios raw_termios = orig_termios;
-		raw_termios.c_lflag &= ~(ICANON | ECHO);
-		raw_termios.c_cc[VMIN] = 0;
-		raw_termios.c_cc[VTIME] = 0;
-		tcsetattr(STDIN_FILENO, TCSANOW, &raw_termios);
-	}
-
-	bool is_there_keypress(){
-		struct timeval tv = {0L, 0L};
-		fd_set fds;
-		FD_ZERO(&fds);
-		FD_SET(STDIN_FILENO, &fds);
-		return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0;		
-	}
-	
-	~Keyboard(){
-		restore_terminal();	
-	}
-
-	void restore_terminal(){
-		tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
-	}
-
-	char get_latest_key() {
-        char latest = 0;
-        char temp;
-        // Đọc liên tục cho đến khi hàm read trả về <= 0 (hết buffer)
-        while (read(STDIN_FILENO, &temp, 1) > 0) {
-            latest = temp;
-        }
-        return latest;
-    }
-};
-
 int main(){
+	MotorsController motors_controller;
+	MotorsSpeed motors_speed{0.0, 0.0, 0.0, 0.0};
 
 	float current_heading = 0.0f;
 	float current_angle = 0.0f;
@@ -137,8 +105,8 @@ int main(){
 	const float TARGET_FORWARD_SPEED = 0.8f;
 	const float TARGET_ANGLE_SPEED = 0.6f;
 
-	const float ALPHA_HEADING = 0.15f;
-	const float ALPHA_ANGLE = 0.25f;
+	const float ALPHA_HEADING = 0.1f;
+	const float ALPHA_ANGLE = 0.15f;
 
 	auto last_packet_time = std::chrono::steady_clock::now();
 	const std::chrono::milliseconds NETWORK_TIMEOUT(500);
@@ -167,9 +135,12 @@ int main(){
 		if (std::abs(current_heading) < 0.01f) current_heading = 0.0f;
 		if (std::abs(current_angle) < 0.01f) current_angle = 0.0f;
 		
-		speed_to_duty_cycle(duty_cycle_controller, current_heading, current_angle);
+		motors_speed = HighLevelSpeed_to_MotorSpeed(current_heading, current_angle);
+		motors_controller.setLeftSpeed(motors_speed.left_forward, motors_speed.left_reverse);
+		motors_controller.setRightSpeed(motors_speed.right_forward, motors_speed.right_reverse);
+
 		std::this_thread::sleep_for(std::chrono::milliseconds(30)); //30ms
 	}
-	close_motors(duty_cycle_controller);	
+	motors_controller.closeMotors();	
 	return 0;
 }

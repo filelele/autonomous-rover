@@ -2,6 +2,7 @@ import socket
 import time
 import pygame
 
+#Tailscale IP of the RasPi Zero 2W
 UDP_IP = "100.91.38.52"
 UDP_PORT = 12345
 
@@ -25,8 +26,8 @@ try:
                 running = False
 
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_w]: heading = 0.8
-        if keys[pygame.K_s]: heading = 0.0
+        if keys[pygame.K_w]: heading = 0.75
+        if keys[pygame.K_s]: heading = -0.4
         if keys[pygame.K_a]: angle = -0.4
         if keys[pygame.K_d]: angle = 0.4
         
