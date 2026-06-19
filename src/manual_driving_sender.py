@@ -2,7 +2,7 @@ import socket
 import time
 import pygame
 
-UDP_IP = "192.168.1.202"
+UDP_IP = "100.91.38.52"
 UDP_PORT = 12345
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -27,13 +27,11 @@ try:
         keys = pygame.key.get_pressed()
         if keys[pygame.K_w]: heading = 0.8
         if keys[pygame.K_s]: heading = 0.0
-        if keys[pygame.K_a]: angle = -0.6
-        if keys[pygame.K_d]: angle = 0.6
+        if keys[pygame.K_a]: angle = -0.4
+        if keys[pygame.K_d]: angle = 0.4
         
         msg = f"{heading},{angle}"
-        
-        print(f"{msg}\n") 
-        
+                
         sock.sendto(msg.encode(), (UDP_IP, UDP_PORT))
         
         #20hz

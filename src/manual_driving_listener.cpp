@@ -141,7 +141,7 @@ int main(){
 	const float ALPHA_ANGLE = 0.25f;
 
 	auto last_packet_time = std::chrono::steady_clock::now();
-	const std::chrono::milliseconds NETWORK_TIMEOUT(600);
+	const std::chrono::milliseconds NETWORK_TIMEOUT(500);
 	
 	//Keyboard keyboard;
 	//keyboard.init_non_blocking();
