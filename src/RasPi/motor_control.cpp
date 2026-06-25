@@ -67,19 +67,19 @@ MotorsController::MotorsController(){
 	{
 		std::ofstream period_forward_left("/sys/class/pwm/pwmchip0/pwm0/period");
 		if(period_forward_left.is_open()){
-			period_forward_left << PERIOD << std::flush; 
+			period_forward_left << PERIOD_FORWARD << std::flush; 
 		}
 		
 	}
 	{
 		std::ofstream period_forward_right("/sys/class/pwm/pwmchip0/pwm1/period");
 		if(period_forward_right.is_open()){
-			period_forward_right << PERIOD << std::flush;
+			period_forward_right << PERIOD_FORWARD << std::flush;
 		}
 	}
 
 	std::ofstream duty_cycle_left_forward("/sys/class/pwm/pwmchip0/pwm0/duty_cycle");
-	std::ofstream duty_cycle_right_right_forward("/sys/class/pwm/pwmchip0/pwm1/duty_cycle");
+	std::ofstream duty_cycle_right_forward("/sys/class/pwm/pwmchip0/pwm1/duty_cycle");
 	duty_cycle_left_forward << "0" << std::flush;
 	duty_cycle_right_forward << "0" << std::flush;
 
@@ -100,13 +100,13 @@ MotorsController::MotorsController(){
         throw std::runtime_error("GPIO Initialization Failed\n");
     }
 
-	gpioSetPWMfrequency(left_reverse_gpio, FREQ_REVERSE) //8khz
-	gpioSetPWMfrequency(right_reverse_gpio, FREQ_REVERSE)
+	gpioSetPWMfrequency(left_reverse_gpio, FREQ_REVERSE); //8khz
+	gpioSetPWMfrequency(right_reverse_gpio, FREQ_REVERSE);
 }
 
 void MotorsController::closeMotors() {
     if (left_forward_pwm_duty_cycle.is_open())  left_forward_pwm_duty_cycle  << "0" << std::flush;
-    if (right_forward_pwm_duty_cycle.right.is_open()) right_forward_pwm_duty_cycle << "0" << std::flush;
+    if (right_forward_pwm_duty_cycle.is_open()) right_forward_pwm_duty_cycle << "0" << std::flush;
 
     std::ofstream disable_left_forward("/sys/class/pwm/pwmchip0/pwm0/enable");
     std::ofstream disable_right_forward("/sys/class/pwm/pwmchip0/pwm1/enable");

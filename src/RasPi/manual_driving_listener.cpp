@@ -1,4 +1,5 @@
 #include "motor_control.hpp"
+#include <termios.h>
 #include <sys/select.h>
 #include <unistd.h>
 #include <algorithm>
@@ -22,9 +23,9 @@ MotorsSpeed HighLevelSpeed_to_MotorSpeed(float heading_speed, float angle_speed)
 	float left_reverse = 0.0;
 	float right_reverse = 0.0;		
 
-    float left_mixed = 0.0;
-    float right_mixed = 0.0;
-    
+	float left_mixed = 0.0;
+	float right_mixed = 0.0;
+
 	if (heading_speed >= 0.0f) {
         // Forward
         left_mixed  = heading_speed + angle_speed;
@@ -45,13 +46,13 @@ MotorsSpeed HighLevelSpeed_to_MotorSpeed(float heading_speed, float angle_speed)
     if (left_mixed >= 0.0f) {
         left_forward = left_mixed;
     } else {
-        left_reverse = std::abs(left_mixed); // Make it a positive fraction [0.0, 1.0] in case of reversing 
+        left_reverse = std::abs(left_mixed); // Make it a positive fraction [0.0, 1.0]
     }
 
     if (right_mixed >= 0.0f) {
         right_forward = right_mixed;
     } else {
-        right_reverse = std::abs(right_mixed); // Make it a positive fraction [0.0, 1.0] in case of reversing
+        right_reverse = std::abs(right_mixed); // Make it a positive fraction [0.0, 1.0]
     }
 
     MotorsSpeed output;
@@ -59,6 +60,7 @@ MotorsSpeed HighLevelSpeed_to_MotorSpeed(float heading_speed, float angle_speed)
     output.left_reverse  = left_reverse;
     output.right_forward = right_forward;
     output.right_reverse = right_reverse;
+    return output;
 }
 
 class UDPServer {
@@ -104,9 +106,6 @@ int main(){
 	float target_heading = 0.0f;
 	float target_angle = 0.0f;
 
-	const float TARGET_FORWARD_SPEED = 0.8f;
-	const float TARGET_ANGLE_SPEED = 0.6f;
-
 	const float ALPHA_HEADING = 0.1f;
 	const float ALPHA_ANGLE = 0.15f;
 
@@ -126,7 +125,7 @@ int main(){
             last_packet_time = std::chrono::steady_clock::now();
         }
 
-		if (std::chrono::steady_clock::now() - last_keypress_time > NETWORK_TIMEOUT){
+		if (std::chrono::steady_clock::now() - last_packet_time > NETWORK_TIMEOUT){
 		            target_heading = 0.0f;
 		            target_angle = 0.0f;
 		}
