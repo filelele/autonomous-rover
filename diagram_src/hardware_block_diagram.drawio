@@ -1,0 +1,70 @@
+<mxfile host="65bd71144e">
+    <diagram name="Page-1" id="17dc0VHaZB0VF0qrv0uT">
+        <mxGraphModel dx="702" dy="579" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-25" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0.433;entryY=-0.023;entryDx=0;entryDy=0;entryPerimeter=0;strokeWidth=3;fillColor=default;strokeColor=#FF3333;fillStyle=auto;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="421" y="86" as="sourcePoint"/>
+                        <mxPoint x="517.96" y="379.62" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;fillColor=default;strokeColor=#FF3333;fillStyle=auto;" parent="1" source="_ZDA2ETEgttCnZF9TFYW-1" target="_ZDA2ETEgttCnZF9TFYW-12" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-27" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#FF3333;" parent="1" source="_ZDA2ETEgttCnZF9TFYW-1" target="_ZDA2ETEgttCnZF9TFYW-6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-1" value="Power Supply&lt;div&gt;(3S 18650)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="305" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fillColor=#60a917;strokeColor=#2D7600;strokeWidth=2;" parent="1" source="_ZDA2ETEgttCnZF9TFYW-2" target="_ZDA2ETEgttCnZF9TFYW-6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-2" value="Companion Computer&lt;div&gt;(Pi Zero 2W)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="300" y="280" width="130" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fillColor=#60a917;strokeColor=#2D7600;strokeWidth=2;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="240" y="296" as="sourcePoint"/>
+                        <mxPoint x="300" y="296" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-4" value="Android Phone&lt;div&gt;(Honor X9B 5G)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="280" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fillColor=#60a917;strokeColor=#FF3333;strokeWidth=3;" parent="1" source="_ZDA2ETEgttCnZF9TFYW-6" target="_ZDA2ETEgttCnZF9TFYW-8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-6" value="Motor Driver IC1&lt;div&gt;(BTS7960)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="470" y="280" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-8" value="Motor1&lt;div&gt;(&lt;span style=&quot;background-color: rgb(255, 255, 255); color: rgba(0, 0, 0, 0.8); font-family: SHPBurmese, SHPKhmer, &amp;quot;Helvetica Neue&amp;quot;, Helvetica, Arial, 文泉驛正黑, &amp;quot;WenQuanYi Zen Hei&amp;quot;, &amp;quot;Hiragino Sans GB&amp;quot;, &amp;quot;儷黑 Pro&amp;quot;, &amp;quot;LiHei Pro&amp;quot;, &amp;quot;Heiti TC&amp;quot;, 微軟正黑體, &amp;quot;Microsoft JhengHei UI&amp;quot;, &amp;quot;Microsoft JhengHei&amp;quot;, sans-serif; font-size: 14px; text-align: start; white-space: pre-wrap;&quot;&gt;33GB520&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;)&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="630" y="280" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;fillColor=default;strokeColor=#FF3333;fillStyle=auto;" parent="1" source="_ZDA2ETEgttCnZF9TFYW-12" target="_ZDA2ETEgttCnZF9TFYW-2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-12" value="5V-5A DC-DC Converter" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="305" y="161" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fillColor=#60a917;strokeColor=#FF3333;strokeWidth=3;" parent="1" source="_ZDA2ETEgttCnZF9TFYW-17" target="_ZDA2ETEgttCnZF9TFYW-19" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-17" value="Motor Driver IC2&lt;div&gt;(BTS7960)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="470" y="380" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="_ZDA2ETEgttCnZF9TFYW-19" value="Motor2&lt;div&gt;(&lt;span style=&quot;background-color: rgb(255, 255, 255); color: rgba(0, 0, 0, 0.8); font-family: SHPBurmese, SHPKhmer, &amp;quot;Helvetica Neue&amp;quot;, Helvetica, Arial, 文泉驛正黑, &amp;quot;WenQuanYi Zen Hei&amp;quot;, &amp;quot;Hiragino Sans GB&amp;quot;, &amp;quot;儷黑 Pro&amp;quot;, &amp;quot;LiHei Pro&amp;quot;, &amp;quot;Heiti TC&amp;quot;, 微軟正黑體, &amp;quot;Microsoft JhengHei UI&amp;quot;, &amp;quot;Microsoft JhengHei&amp;quot;, sans-serif; font-size: 14px; text-align: start; white-space: pre-wrap;&quot;&gt;33GB520&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;)&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="630" y="380" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="nzmIgRgKKq1eHIz9x9x7-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fillColor=#60a917;strokeColor=#2D7600;strokeWidth=2;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="300" y="320" as="sourcePoint"/>
+                        <mxPoint x="240" y="320" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

@@ -53,7 +53,7 @@ void MotorsController::setRightSpeed(float forward_frac, float reverse_frac) {
 }
 
 
-void MotorsController::MotorController(){
+MotorsController::MotorsController(){
 	{
 		std::ofstream pwm_export("/sys/class/pwm/pwmchip0/export");
 		if(pwm_export.is_open()){

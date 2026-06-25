@@ -1,5 +1,4 @@
 #include "motor_control.hpp"
-#include <termios.h>
 #include <sys/select.h>
 #include <unistd.h>
 #include <algorithm>
@@ -23,6 +22,9 @@ MotorsSpeed HighLevelSpeed_to_MotorSpeed(float heading_speed, float angle_speed)
 	float left_reverse = 0.0;
 	float right_reverse = 0.0;		
 
+    float left_mixed = 0.0;
+    float right_mixed = 0.0;
+    
 	if (heading_speed >= 0.0f) {
         // Forward
         left_mixed  = heading_speed + angle_speed;
@@ -43,13 +45,13 @@ MotorsSpeed HighLevelSpeed_to_MotorSpeed(float heading_speed, float angle_speed)
     if (left_mixed >= 0.0f) {
         left_forward = left_mixed;
     } else {
-        left_reverse = std::abs(left_mixed); // Make it a positive fraction [0.0, 1.0]
+        left_reverse = std::abs(left_mixed); // Make it a positive fraction [0.0, 1.0] in case of reversing 
     }
 
     if (right_mixed >= 0.0f) {
         right_forward = right_mixed;
     } else {
-        right_reverse = std::abs(right_mixed); // Make it a positive fraction [0.0, 1.0]
+        right_reverse = std::abs(right_mixed); // Make it a positive fraction [0.0, 1.0] in case of reversing
     }
 
     MotorsSpeed output;

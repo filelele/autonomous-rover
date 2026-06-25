@@ -5,7 +5,7 @@
 #include <iostream>                                                              
 #include <thread>                                                                
 #include <chrono> 
-#include <pigpio.h>
+#include <pigpio.h> 
 
 const int PERIOD_FORWARD = 50000; //hardware PWM, nanoseconds
 const int FREQ_REVERSE = 8000; //software PWM through GPIO, Hz
