@@ -1,6 +1,7 @@
 #ifndef FRAME_BUFFER
 #define FRAME_BUFFER
 
+#include <cstring>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -18,8 +19,6 @@ struct RawYUVPlaneInput {
 struct Frame {
     struct Plane {
         std::vector<uint8_t> data;
-        int row_stride = 0;
-        int pixel_stride = 0;
     };
 
     int format = 0;
@@ -46,7 +45,7 @@ using FramePtr = std::shared_ptr<const Frame>;
 
 class FrameBuffer {
 private:
-    std::atomic<FramePtr> latest_frame; //use atomic, update shared_ptr object without getting blocked
+    FramePtr latest_frame;
 
 public:
     FrameBuffer();

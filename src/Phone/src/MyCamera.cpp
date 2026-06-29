@@ -44,7 +44,6 @@ bool Camera::init_camera() {
         return false;
     }
 
-    //characteristics container pointer
     ACameraMetadata* cameraCharacteristics = nullptr;
     ACameraManager_getCameraCharacteristics(m_cameraManager, m_selectedCameraId, &cameraCharacteristics);
 
@@ -52,6 +51,7 @@ bool Camera::init_camera() {
     ACameraMetadata_getConstEntry(cameraCharacteristics, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry);
 
     //Loop through all supported camera configs 
+    bool res_exist = false;
     for (size_t i = 0; i < entry.count; i += 4) {
         int32_t format = entry.data.i32[i];
         int32_t width  = entry.data.i32[i + 1];
@@ -61,17 +61,22 @@ bool Camera::init_camera() {
         // Only care about configs of 1920x1080, for now
         if (input == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT && 
             format == AIMAGE_FORMAT_YUV_420_888 &&
-            width == 1920 && 
-            height == 1080) { //YUV_420_888 is the standard for any Google certified device, Gemini said so =))
+            width == 1280 &&
+            height == 720) { //YUV_420_888 is the standard for any Google certified device, Gemini said so =))
             
+            res_exist = true;
             LOGI("Found supported hardware resolution: %d x %d", width, height);
-        }else return false;
+        }
+    }
+    if(!res_exist){
+        LOGE("Not support native 1080p YUV_420_888 capture, maybe something else.");
+        return false;
     }
 
     ACameraMetadata_free(cameraCharacteristics);
 
-    // Allocate memory buffer slots for the incoming frame stream (1920x1080 YUV, keeping max 3 frames)
-    media_status_t mediaStatus = AImageReader_new(1920, 1080, AIMAGE_FORMAT_YUV_420_888, 3, &m_imageReader);
+    // Allocate memory buffer slots for the incoming frame stream (1280x720 YUV, keeping max 3 frames)
+    media_status_t mediaStatus = AImageReader_new(1280, 720, AIMAGE_FORMAT_YUV_420_888, 3, &m_imageReader);
     if (mediaStatus != AMEDIA_OK) {
         LOGE("Failed to allocate ImageReader.");
         return false;
@@ -83,7 +88,6 @@ bool Camera::init_camera() {
     // Register Listener callback to the Image reader container (listen if there is image write to allocated mem)
     AImageReader_setImageListener(m_imageReader, &m_imageListener);
 
-    // Get the imageReaderWindow
     AImageReader_getWindow(m_imageReader, &m_imageReaderWindow);
     
     LOGI("Camera initialization successed.");
@@ -108,6 +112,10 @@ void Camera::start_stream() {
     ACameraDevice_createCaptureRequest(m_cameraDevice, TEMPLATE_PREVIEW, &m_captureRequest);
     ACaptureRequest_addTarget(m_captureRequest, outputTarget);
 
+    //lock at 30fps
+    int32_t targetFpsRange[2] = {30, 30};
+    ACaptureRequest_setEntry_i32(m_captureRequest, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, targetFpsRange);
+
     // Capture session callbacks
     m_sessionCallbacks.context = this;
     m_sessionCallbacks.onActive = [](void* ctx, ACameraCaptureSession* ses) { LOGI("Camera streaming session active."); };
@@ -116,8 +124,17 @@ void Camera::start_stream() {
 
     ACameraDevice_createCaptureSession(m_cameraDevice, container, &m_sessionCallbacks, &m_captureSession);
     
-    // Config session to capture frames continuously forever
+    // Config session to capture frames continuously
     ACameraCaptureSession_setRepeatingRequest(m_captureSession, nullptr, 1, &m_captureRequest, nullptr);
+    if (container) {
+        ACaptureSessionOutputContainer_free(container); 
+    }
+    if (sessionOutput) {
+        ACaptureSessionOutput_free(sessionOutput);
+    }
+    if (outputTarget) {
+        ACameraOutputTarget_free(outputTarget);
+    }
 }
 
 void Camera::stop_stream() {
@@ -126,11 +143,16 @@ void Camera::stop_stream() {
         ACameraCaptureSession_close(m_captureSession);
         m_captureSession = nullptr;
     }
+    if (m_captureRequest) {
+        ACaptureRequest_free(m_captureRequest);
+        m_captureRequest = nullptr;
+    }
     if (m_cameraDevice) {
         ACameraDevice_close(m_cameraDevice);
         m_cameraDevice = nullptr;
     }
     if (m_imageReader) {
+        AImageReader_setImageListener(m_imageReader, nullptr);
         AImageReader_delete(m_imageReader);
         m_imageReader = nullptr;
     }
@@ -142,6 +164,7 @@ void Camera::stop_stream() {
         ACameraManager_delete(m_cameraManager);
         m_cameraManager = nullptr;
     }
+
     LOGI("Camera stopped.");
 }
 

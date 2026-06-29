@@ -1,11 +1,17 @@
 import socket
 import time
 import pygame
+import json
+from pathlib import Path
 
-#Tailscale IP of the RasPi Zero 2W
-UDP_IP = "100.91.38.52"
+script_dir = Path(__file__).resolve().parent
+json_path = script_dir / "../Shared/include/tailscale_ip.json"
+with open(json_path) as f:
+    tailscale_ip = json.load(f)
+
+UDP_IP = tailscale_ip['pi_ip']
 UDP_PORT = 12345
-
+print(f"Loaded Pi IP: {UDP_IP}")
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 keys = {'w': False, 'a': False, 'd': False, 's': False}
@@ -26,10 +32,10 @@ try:
                 running = False
 
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_w]: heading = 0.75
+        if keys[pygame.K_w]: heading = 0.4
         if keys[pygame.K_s]: heading = -0.4
-        if keys[pygame.K_a]: angle = -0.4
-        if keys[pygame.K_d]: angle = 0.4
+        if keys[pygame.K_a]: angle = -0.3
+        if keys[pygame.K_d]: angle = 0.3
         
         msg = f"{heading},{angle}"
                 
