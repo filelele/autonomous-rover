@@ -57,19 +57,64 @@ void DashboardListener::initialize(const std::string& publisher_ip, int signalPo
                 video_channel->onMessage([this](const rtc::message_variant& message) {
                     if (std::holds_alternative<std::string>(message)) return;
 
-                    const rtc::binary& jpeg = std::get<rtc::binary>(message);
-                    cv::Mat encoded(1, static_cast<int>(jpeg.size()), CV_8UC1, const_cast<std::byte*>(jpeg.data()));
-                    cv::Mat bgr = cv::imdecode(encoded, cv::IMREAD_COLOR);
+                    const rtc::binary& packet = std::get<rtc::binary>(message);
+                    if (packet.size() < sizeof(int64_t)) return;
 
-                    if (bgr.empty()) {
-                        std::cerr << "[Video] Failed to decode JPEG." << std::endl;
+                    int64_t frame_ts_ns;
+                    std::memcpy(&frame_ts_ns, packet.data(), sizeof(int64_t));
+
+                    // Both sides synced to Unix Epoch Time
+                    auto now = std::chrono::system_clock::now();
+                    auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+
+                    int64_t latency_ms = (now_ns - frame_ts_ns) / 1000000;
+                    
+                    if (latency_ms > 200) {
+                        std::cout << "[Video] Dropping stale frame. Latency: " << latency_ms << "ms" << std::endl;
                         return;
                     }
 
-                    // Upsample from 480x270 to 1280x720
-                    // INTER_CUBIC > INTER_LINEAR
+                    packet_counter.packet_accumulator++;
+
+                    auto now_steady = std::chrono::steady_clock::now();
+                    std::chrono::duration<double> elapsed = now_steady - packet_counter.window_start;
+
+                    // every 1 sec
+                    if (elapsed.count() >= 1.0) {
+                        packet_counter.incoming_fps = packet_counter.packet_accumulator / elapsed.count();
+                        packet_counter.packet_accumulator = 0;
+                        packet_counter.window_start = now_steady;
+                    }
+
+                    const std::byte* webp_data = packet.data() + sizeof(int64_t);
+                    size_t webp_size = packet.size() - sizeof(int64_t);
+
+                    cv::Mat encoded(1, static_cast<int>(webp_size), CV_8UC1, const_cast<std::byte*>(webp_data));
+                    cv::Mat bgr = cv::imdecode(encoded, cv::IMREAD_COLOR);
+
+                    if (bgr.empty()) {
+                        std::cerr << "[Video] Failed to decode WebP." << std::endl;
+                        return;
+                    }
+
+                    // Gamma Correction (gamma = 1.4)
+                    // Precompute LUT for faster performance
+                    static unsigned char lut[256];
+                    static bool lut_ready = false;
+                    if (!lut_ready) {
+                        double gamma = 1.4;
+                        for (int i = 0; i < 256; i++) {
+                            lut[i] = cv::saturate_cast<uchar>(pow(i / 255.0, 1.0 / gamma) * 255.0);
+                        }
+                        lut_ready = true;
+                    }
+                    cv::Mat gamma_corrected;
+                    cv::LUT(bgr, cv::Mat(1, 256, CV_8U, lut), gamma_corrected);
+
+                    // Upsample from 384x216 to 1280x720
+                    // INTER_LANCZOS4 > INTER_CUBIC > INTER_LINEAR in quality, reverse in latency
                     cv::Mat upsampled;
-                    cv::resize(bgr, upsampled, cv::Size(1280, 720), 0, 0, cv::INTER_CUBIC);
+                    cv::resize(gamma_corrected, upsampled, cv::Size(1280, 720), 0, 0, cv::INTER_LANCZOS4);
 
                     bgr_buffer.store(std::make_shared<cv::Mat>(std::move(upsampled)), std::memory_order_release);
                 });

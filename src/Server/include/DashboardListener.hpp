@@ -19,6 +19,13 @@ private:
     std::atomic<bool> is_initialized{false};
     std::atomic<bool> is_running{true};
 
+    struct PacketCounter {
+        std::chrono::steady_clock::time_point window_start = std::chrono::steady_clock::now();
+        int packet_accumulator = 0;
+        double incoming_fps = 0.0;
+    };
+    PacketCounter packet_counter;
+
 public:
     DashboardListener();
     ~DashboardListener();
@@ -31,6 +38,7 @@ public:
      */
     void initialize(const std::string& publisher_ip, int signalPort);
     std::shared_ptr<const cv::Mat> getLatestBgr();
+    double getIncomingFps() const { return packet_counter.incoming_fps; }
     void stopListening();
 };
 

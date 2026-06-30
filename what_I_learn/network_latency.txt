@@ -1,0 +1,16 @@
+Network latency = congestion of network infra + packet error rate
+
+- Packet error rate -> longer time between consecutive packets (cause of in-between packet error).
+  (+)--> For huge video frame, require multiple packets --> Higher frame error rate (1 packet loss -> drop whole frame)
+                               --> frame_err_rate = pack_err_rate^n_packet --> Longer time between consecutive frames.
+  (+)--> Reduce video frame size == less packet per frame --> Lower frame error rate --> Reduce time between frames.
+
+- Congestion of network infra: Simplified model of node = buffer + processor
+  (+) Tower cell/Router/etc... may has way lower packet rate compared to packet producer (LTE mostly).
+  (+) Producer (The machine sending) quickly fill up its packet buffer (Out rate < In rate).
+  (+) Later New packets (low ms) need to wait for Old packets (high ms) to go away
+        --> New packets + Wait time (Huge delta ms) = Old packets
+            --> Always get old packets.
+  (+) Solution: Does not update to machine buffer when there is buffered packet
+                    --> New packet arrive + No wait time (since no buffer) = New packet (If the infra not too slow =>).
+

@@ -42,11 +42,19 @@ void DashboardUI::handleEvents() {
     }
 }
 
-void DashboardUI::update(std::shared_ptr<const cv::Mat> frame) {
+void DashboardUI::update(std::shared_ptr<const cv::Mat> frame, double fps) {
     if (!m_running || !frame || frame->empty()) return;
 
+    cv::Mat displayFrame = frame->clone();
+
+    if (fps > 0.0) {
+        std::string fpsText = "StreamFPS: " + std::to_string(static_cast<int>(fps));
+        cv::putText(displayFrame, fpsText, cv::Point(30, 50),
+                    cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 255, 0), 2);
+    }
+
     // Create or recreate texture if size changed
-    if (!m_texture || frame->cols != m_width || frame->rows != m_height) {
+    if (!m_texture || displayFrame.cols != m_width || displayFrame.rows != m_height) {
         if (m_texture) SDL_DestroyTexture(m_texture);
 
         m_width = frame->cols;
@@ -60,7 +68,7 @@ void DashboardUI::update(std::shared_ptr<const cv::Mat> frame) {
         }
     }
 
-    SDL_UpdateTexture(m_texture, NULL, frame->data, frame->step);
+    SDL_UpdateTexture(m_texture, NULL, displayFrame.data, displayFrame.step);
 
     SDL_RenderClear(m_renderer);
     SDL_RenderCopy(m_renderer, m_texture, NULL, NULL);

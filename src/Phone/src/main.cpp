@@ -1,6 +1,7 @@
 #include <thread>
 #include <native_app_glue/android_native_app_glue.h>
 #include <android/log.h>
+#include <android/window.h>
 #include "FrameBuffer.hpp"
 #include "MyCamera.hpp"
 #include "DashboardPublisher.hpp"
@@ -18,6 +19,8 @@ void handle_android_cmd(struct android_app* app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_INIT_WINDOW:
             LOGI("Android gave us a screen surface! We can render here.");
+            // Keep screen on
+            ANativeActivity_setWindowFlags(app->activity, AWINDOW_FLAG_KEEP_SCREEN_ON, 0);
             break;
         case APP_CMD_TERM_WINDOW:
             LOGI("Screen surface destroyed or minimized. Stop processing.");

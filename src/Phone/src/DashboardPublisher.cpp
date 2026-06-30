@@ -7,6 +7,7 @@
 #include <chrono>
 #include <poll.h>
 #include <fcntl.h>
+#include <time.h>
 
 #define TAG "WebRTC_Publisher"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -154,7 +155,7 @@ void DashboardPublisher::initialize(int signalPort){
 }
 
 
-const std::vector<uint8_t>& DashboardPublisher::convertToJpeg(const FramePtr& frame, int quality = 75) {
+const std::vector<uint8_t>& DashboardPublisher::convertToWebp(const FramePtr& frame, int quality = 75) {
     int w = frame->width;
     int h = frame->height;
     
@@ -178,17 +179,29 @@ const std::vector<uint8_t>& DashboardPublisher::convertToJpeg(const FramePtr& fr
     cv::cvtColor(i420, bgr, cv::COLOR_YUV2BGR_I420);
 
     cv::Mat& resized = video_stream_frame.resized;
-    resized.create(270, 480, CV_8UC3);
-    cv::resize(bgr, resized, cv::Size(480,270), 0, 0, cv::INTER_AREA);
+    resized.create(216, 384, CV_8UC3);
+    cv::resize(bgr, resized, cv::Size(384,216), 0, 0, cv::INTER_AREA);
 
-    std::vector<uint8_t>& jpeg = video_stream_frame.jpeg;
-    cv::imencode(".jpg", resized, jpeg, {cv::IMWRITE_JPEG_QUALITY, quality});
+    std::vector<uint8_t>& webp = video_stream_frame.webp;
+    // Switch to WebP encoding
+    // WebP typically provides better compression than JPEG at similar quality
+    // Quality 65-75 is generally good for WebP lossy
+    cv::imencode(".webp", resized, webp, {cv::IMWRITE_WEBP_QUALITY, quality});
 
-    return jpeg;
+    return webp;
 }
 
 void DashboardPublisher::videoStream(){
     int64_t lastTimestamp = 0;
+
+    // Convert Monotonic clock (used by ACamera) to Realtime clock Unix Epoch
+    struct timespec ts_mono, ts_real;
+    clock_gettime(CLOCK_MONOTONIC, &ts_mono);
+    clock_gettime(CLOCK_REALTIME, &ts_real);
+    int64_t mono_ns = static_cast<int64_t>(ts_mono.tv_sec) * 1000000000LL + ts_mono.tv_nsec;
+    int64_t real_ns = static_cast<int64_t>(ts_real.tv_sec) * 1000000000LL + ts_real.tv_nsec;
+    int64_t clock_offset_ns = real_ns - mono_ns;
+
     while(is_running){
         std::this_thread::sleep_for(std::chrono::milliseconds(25)); //max 40fps
         if(!video_channel || !video_channel->isOpen()){
@@ -197,8 +210,8 @@ void DashboardPublisher::videoStream(){
         }
 
         // Avoid buffer bloat: skip frame if more than 256KB in queue
-        if (video_channel->bufferedAmount() > 256 * 1024) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (video_channel->bufferedAmount() > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
             continue;
         }
 
@@ -214,9 +227,16 @@ void DashboardPublisher::videoStream(){
             lastTimestamp = frame->timestamp_ns;
         }
 
-        const auto& jpeg = convertToJpeg(frame, 65);
+        const auto& jpeg = convertToWebp(frame, 40);
+
+        // Prepare packet: [8 bytes timestamp_ns (Unix Epoch)][JPEG data]
+        std::vector<std::byte> packet(sizeof(int64_t) + jpeg.size());
+        int64_t epoch_ts_ns = frame->timestamp_ns + clock_offset_ns;
+        std::memcpy(packet.data(), &epoch_ts_ns, sizeof(int64_t));
+        std::memcpy(packet.data() + sizeof(int64_t), jpeg.data(), jpeg.size());
+
         try {
-            video_channel->send(reinterpret_cast<const std::byte*>(jpeg.data()), jpeg.size());
+            video_channel->send(packet.data(), packet.size());
         } catch (const std::exception& e) {
             LOGE("Failed to send video frame: %s", e.what());
         }

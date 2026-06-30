@@ -13,7 +13,7 @@ public:
 
     bool isRunning() const { return m_running; }
     void handleEvents();
-    void update(std::shared_ptr<const cv::Mat> frame);
+    void update(std::shared_ptr<const cv::Mat> frame, double fps = 0.0);
 
 private:
     SDL_Window* m_window = nullptr;

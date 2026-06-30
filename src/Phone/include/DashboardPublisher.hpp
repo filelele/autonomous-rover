@@ -37,11 +37,11 @@ private:
         cv::Mat i420;
         cv::Mat bgr;
         cv::Mat resized;
-        std::vector<uint8_t> jpeg;
+        std::vector<uint8_t> webp;
     };
     VideoStreamFrame video_stream_frame;
 
-    const std::vector<uint8_t>& convertToJpeg(const FramePtr& frame, int quality);
+    const std::vector<uint8_t>& convertToWebp(const FramePtr& frame, int quality);
 
 
     void videoStream();
