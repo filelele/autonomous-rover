@@ -112,7 +112,7 @@ void DashboardPublisher::initialize(int signalPort){
             auto vc = pc->createDataChannel("video_stream", video_config);
 
             vc->onOpen([this, vc]() {
-                LOGI("WebRTC JPEG Video Channel opened.");
+                LOGI("WebRTC Webp Video Channel opened.");
                 this->video_channel = vc;
             });
 
