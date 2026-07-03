@@ -1,4 +1,4 @@
-#include "DashboardPublisher.hpp"
+#include "PhoneServerCommunication.hpp"
 #include <android/log.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,12 +13,24 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-DashboardPublisher::DashboardPublisher(FrameBuffer* frame_buffer) : frame_buffer(frame_buffer){
-    peer_connection = nullptr;
+PhoneServerCommunication::PhoneServerCommunication(
+    const FrameBuffer& frame_buffer, bool& manual_mode, bool& record_data) : 
+    frame_buffer(frame_buffer), manual_mode(manual_mode), record_data(record_data)
+{
+    connection.control_udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    connection.control_udp_addr.sin_family = AF_INET;
+    connection.control_udp_addr.sin_port = htons(12345);
+
+    // PI_IP_BAKED is passed via CMake from the build environment
+    inet_pton(AF_INET, PI_IP_BAKED, &connection.control_udp_addr.sin_addr);
+    LOGI("Communication initialized with baked PI_IP: %s", PI_IP_BAKED);
 };
 
-DashboardPublisher::~DashboardPublisher(){
-    this->stopPublishing();
+PhoneServerCommunication::~PhoneServerCommunication(){
+    this->stopCommunication();
+    if (connection.control_udp_socket != -1) {
+        close(connection.control_udp_socket);
+    }
 }
 
 static bool readExact(int fd, void* buffer, size_t n) {
@@ -49,7 +61,7 @@ static bool sendPrefixed(int fd, const std::string& msg) {
     return true;
 }
 
-void DashboardPublisher::initialize(int signalPort){
+void PhoneServerCommunication::initialize(int signalPort){
     is_running = true;
     
     int serverFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -102,27 +114,87 @@ void DashboardPublisher::initialize(int signalPort){
             pc->onStateChange([this, pc](rtc::PeerConnection::State state) {
                 LOGI("PeerConnection State: %d", (int)state);
                 if (state == rtc::PeerConnection::State::Connected) {
-                    this->peer_connection = pc;
+                    this->connection.peer_connection = pc;
                 }
             });
 
             rtc::DataChannelInit video_config;
             video_config.reliability.unordered = true;
-            video_config.reliability.maxRetransmits = 0;
-            auto vc = pc->createDataChannel("video_stream", video_config);
+            video_config.reliability.maxPacketLifeTime = std::chrono::milliseconds(20);
+            auto vc = pc->createDataChannel("video_channel", video_config);
 
             vc->onOpen([this, vc]() {
                 LOGI("WebRTC Webp Video Channel opened.");
-                this->video_channel = vc;
+                this->connection.out_video_channel = vc;
             });
 
             rtc::DataChannelInit state_config;
-            auto sc = pc->createDataChannel("state_stream", state_config);
+            state_config.reliability.unordered = true;
+            state_config.reliability.maxRetransmits = 0;
+            auto sc = pc->createDataChannel("state_channel", state_config);
             sc->onOpen([this, sc]() {
                 LOGI("State Channel opened.");
-                this->state_channel = sc;
+                this->connection.out_state_channel = sc;
             });
 
+            rtc::DataChannelInit mode_config;
+            mode_config.reliability.maxRetransmits = 10;
+            mode_config.reliability.unordered = false;
+            auto mc = pc->createDataChannel("mode_channel", mode_config);
+
+            auto sendState = [this, mc]() {
+                std::string state = "";
+                state += (manual_mode ? "m1" : "m0");
+                state += (record_data ? "r1" : "r0");
+                mc->send(state);
+            };
+
+            mc->onOpen([this, mc, sendState]() {
+                LOGI("Mode Channel opened");
+                this->connection.in_out_mode_channel = mc;
+                sendState();
+            });
+
+            mc->onMessage([this, sendState](const rtc::message_variant& message) {
+                std::string msg_string;
+                if (std::holds_alternative<std::string>(message)) {
+                    msg_string = std::get<std::string>(message);
+                } else {
+                    const rtc::binary& packet = std::get<rtc::binary>(message);
+                    msg_string = std::string(reinterpret_cast<const char*>(packet.data()), packet.size());
+                }
+
+                if (msg_string.length() == 1) {
+                    if (msg_string[0] == 'm') manual_mode = !manual_mode;
+                    else if (msg_string[0] == 'r') record_data = !record_data;
+                    else return;
+                    sendState();
+                }
+            });
+
+            rtc::DataChannelInit manual_control_config;
+            manual_control_config.reliability.maxRetransmits = 0;
+            manual_control_config.reliability.unordered = true;
+            auto mmc = pc->createDataChannel("manual_control_channel", manual_control_config);
+            mmc->onOpen([this, mmc]() {
+                LOGI("Manual Control Channel opened");
+                this->connection.in_manual_control_channel = mmc;
+            });
+
+            mmc->onMessage([this](const rtc::message_variant& message) {
+                if (!manual_mode) return;
+                if (std::holds_alternative<std::string>(message)) {
+                    std::string msg = std::get<std::string>(message);
+                    sendto(connection.control_udp_socket, msg.c_str(), msg.size(), 0,
+                           (struct sockaddr*)&connection.control_udp_addr, sizeof(connection.control_udp_addr));
+                } else {
+                    const rtc::binary& packet = std::get<rtc::binary>(message);
+                    sendto(connection.control_udp_socket, packet.data(), packet.size(), 0,
+                           (struct sockaddr*)&connection.control_udp_addr, sizeof(connection.control_udp_addr));
+                }
+            });
+
+            
             pc->setRemoteDescription(rtc::Description(pc_offer, "offer"));
             LOGI("Set Remote Description success.");
 
@@ -155,7 +227,7 @@ void DashboardPublisher::initialize(int signalPort){
 }
 
 
-const std::vector<uint8_t>& DashboardPublisher::convertToWebp(const FramePtr& frame, int quality = 75) {
+const std::vector<uint8_t>& PhoneServerCommunication::convertToWebp(const FramePtr& frame, int quality = 75) {
     int w = frame->width;
     int h = frame->height;
     
@@ -179,8 +251,8 @@ const std::vector<uint8_t>& DashboardPublisher::convertToWebp(const FramePtr& fr
     cv::cvtColor(i420, bgr, cv::COLOR_YUV2BGR_I420);
 
     cv::Mat& resized = video_stream_frame.resized;
-    resized.create(216, 384, CV_8UC3);
-    cv::resize(bgr, resized, cv::Size(384,216), 0, 0, cv::INTER_AREA);
+    resized.create(180, 320, CV_8UC3);
+    cv::resize(bgr, resized, cv::Size(320,180), 0, 0, cv::INTER_AREA);
 
     std::vector<uint8_t>& webp = video_stream_frame.webp;
     // Switch to WebP encoding
@@ -191,7 +263,7 @@ const std::vector<uint8_t>& DashboardPublisher::convertToWebp(const FramePtr& fr
     return webp;
 }
 
-void DashboardPublisher::videoStream(){
+void PhoneServerCommunication::videoStream(){
     int64_t lastTimestamp = 0;
 
     // Convert Monotonic clock (used by ACamera) to Realtime clock Unix Epoch
@@ -204,18 +276,18 @@ void DashboardPublisher::videoStream(){
 
     while(is_running){
         std::this_thread::sleep_for(std::chrono::milliseconds(25)); //max 40fps
+        auto video_channel = connection.out_video_channel;
         if(!video_channel || !video_channel->isOpen()){
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
-        // Avoid buffer bloat: skip frame if more than 256KB in queue
         if (video_channel->bufferedAmount() > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(25));
             continue;
         }
 
-        FramePtr frame = frame_buffer->get_latest_frame();
+        FramePtr frame = frame_buffer.get_latest_frame();
         if(!frame){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
@@ -227,13 +299,13 @@ void DashboardPublisher::videoStream(){
             lastTimestamp = frame->timestamp_ns;
         }
 
-        const auto& jpeg = convertToWebp(frame, 40);
+        const auto& webp = convertToWebp(frame, 40);
 
-        // Prepare packet: [8 bytes timestamp_ns (Unix Epoch)][JPEG data]
-        std::vector<std::byte> packet(sizeof(int64_t) + jpeg.size());
+        // Prepare packet: [int64_t timestamp_ns (Unix Epoch)][webp]
+        std::vector<std::byte> packet(sizeof(int64_t) + webp.size());
         int64_t epoch_ts_ns = frame->timestamp_ns + clock_offset_ns;
         std::memcpy(packet.data(), &epoch_ts_ns, sizeof(int64_t));
-        std::memcpy(packet.data() + sizeof(int64_t), jpeg.data(), jpeg.size());
+        std::memcpy(packet.data() + sizeof(int64_t), webp.data(), webp.size());
 
         try {
             video_channel->send(packet.data(), packet.size());
@@ -243,18 +315,18 @@ void DashboardPublisher::videoStream(){
     }
 }
 
-void DashboardPublisher::stateStream(){
+void PhoneServerCommunication::stateStream(){
     while(is_running){
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
-void DashboardPublisher::startPublishing(){
-    video_stream_thread = std::thread(&DashboardPublisher::videoStream, this);
-    //state_stream_thread = std::thread(&DashboardPublisher::stateStream, this);
+void PhoneServerCommunication::startCommunication(){
+    video_stream_thread = std::thread(&PhoneServerCommunication::videoStream, this);
+    //state_stream_thread = std::thread(&PhoneServerCommunication::stateStream, this);
 }
 
-void DashboardPublisher::stopPublishing(){
+void PhoneServerCommunication::stopCommunication(){
     is_running.store(false, std::memory_order_release);
     if (video_stream_thread.joinable()) video_stream_thread.join(); 
     //if (state_stream_thread.joinable()) state_stream_thread.join();

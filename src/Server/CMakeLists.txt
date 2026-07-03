@@ -32,7 +32,7 @@ FetchContent_MakeAvailable(datachannel)
 
 # Submodules as static libs
 add_library(dashboard STATIC 
-    src/DashboardListener.cpp 
+    src/ServerPhoneCommunication.cpp
     src/DashboardUI.cpp
 )
 target_include_directories(dashboard PUBLIC 

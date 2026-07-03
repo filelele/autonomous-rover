@@ -1,4 +1,5 @@
 #include "DashboardUI.hpp"
+#include "ServerPhoneCommunication.hpp"
 #include <iostream>
 
 DashboardUI::DashboardUI(const std::string& title, int width, int height)
@@ -33,25 +34,46 @@ DashboardUI::~DashboardUI() {
     SDL_Quit();
 }
 
-void DashboardUI::handleEvents() {
+void DashboardUI::handleEvents(ServerPhoneCommunication& comm) {
     SDL_Event e;
     while (SDL_PollEvent(&e) != 0) {
         if (e.type == SDL_QUIT) {
             m_running = false;
+        } else if (e.type == SDL_KEYDOWN) {
+            if (e.key.repeat == 0) { // Only first press
+                if (e.key.keysym.sym == SDLK_m) {
+                    comm.toggleManualMode();
+                } else if (e.key.keysym.sym == SDLK_r) {
+                    comm.toggleRecordData();
+                }
+            }
         }
     }
 }
 
-void DashboardUI::update(std::shared_ptr<const cv::Mat> frame, double fps) {
+void DashboardUI::update(ServerPhoneCommunication& comm) {
+    auto frame = comm.getLatestBgr();
     if (!m_running || !frame || frame->empty()) return;
 
     cv::Mat displayFrame = frame->clone();
-
+    double fps = comm.getIncomingFps();
+    std::string fpsText = "StreamFPS: ";
     if (fps > 0.0) {
-        std::string fpsText = "StreamFPS: " + std::to_string(static_cast<int>(fps));
-        cv::putText(displayFrame, fpsText, cv::Point(30, 50),
-                    cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 255, 0), 2);
+        fpsText += std::to_string(static_cast<int>(fps));
+    }else {
+        fpsText += "Not available";
     }
+
+    bool manual_mode = comm.getManualModeState();
+    bool record_data = comm.getRecordDataState();
+    std::string manual_modeText = "Manual Mode: ";
+    std::string record_dataText = "Record Data: ";
+    manual_modeText += manual_mode ? "On" : "Off";
+    record_dataText += record_data ? "On" : "Off";
+
+    std::string finalText = fpsText + " | " + manual_modeText + " | " + record_dataText;
+    cv::putText(displayFrame, finalText, cv::Point(30, 50),
+                cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 255, 0), 2);
 
     // Create or recreate texture if size changed
     if (!m_texture || displayFrame.cols != m_width || displayFrame.rows != m_height) {

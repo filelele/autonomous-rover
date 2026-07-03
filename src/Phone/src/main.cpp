@@ -4,14 +4,14 @@
 #include <android/window.h>
 #include "FrameBuffer.hpp"
 #include "MyCamera.hpp"
-#include "DashboardPublisher.hpp"
+#include "PhoneServerCommunication.hpp"
 
 #define TAG "Main"
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__))
 
 struct AppContext{
     Camera* camera;
-    DashboardPublisher* dashboard_publisher;
+    PhoneServerCommunication* phone_server_communication;
 };
 
 void handle_android_cmd(struct android_app* app, int32_t cmd) {
@@ -38,17 +38,20 @@ void android_main(struct android_app* state) {
     Camera camera(&frame_buffer);
     camera.init_camera();
     camera.start_stream();
-    DashboardPublisher dashboard_publisher(&frame_buffer);
 
-    AppContext app_context = {&camera, &dashboard_publisher};
+    bool manual_mode = false;
+    bool record_data = false;
+    PhoneServerCommunication phone_server_communication(frame_buffer, manual_mode, record_data);
+
+    AppContext app_context = {&camera, &phone_server_communication};
     state->onAppCmd = handle_android_cmd;
     state->userData = &app_context;
 
     //std::thread signaling_thread([&dashboard_publisher]() {
-    dashboard_publisher.initialize(8888);
+    phone_server_communication.initialize(8888);
     //});
 
-    dashboard_publisher.startPublishing();
+    phone_server_communication.startCommunication();
 
     while (true) {
         int ident;
@@ -61,7 +64,7 @@ void android_main(struct android_app* state) {
             }
             if (state->destroyRequested != 0) {
                 LOGI("Exiting C++ loop.");
-                dashboard_publisher.stopPublishing();
+                phone_server_communication.stopCommunication();
                 //if (signaling_thread.joinable()) signaling_thread.join();
                 return;
             }

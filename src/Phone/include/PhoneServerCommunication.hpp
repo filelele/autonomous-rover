@@ -10,28 +10,37 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
+#include <netinet/in.h>
 
-class DashboardPublisher{
+class PhoneServerCommunication{
 
 public:
-DashboardPublisher(FrameBuffer* frame_buffer);
-~DashboardPublisher();
+PhoneServerCommunication(const FrameBuffer& frame_buffer, bool& manual_mode, bool& record_data);
+~PhoneServerCommunication();
 
 void initialize(int signalPort = 8888);
-void startPublishing();
-void stopPublishing();
+void startCommunication();
+void stopCommunication();
 
 private:
-    FrameBuffer* frame_buffer;
+    const FrameBuffer& frame_buffer;
     RobotState* robot_state = nullptr;
+    bool& manual_mode;
+    bool& record_data;
 
     std::atomic<bool> is_running{false};
     
 
-    std::shared_ptr<rtc::PeerConnection> peer_connection;
-
-    std::shared_ptr<rtc::DataChannel> video_channel;
-    std::shared_ptr<rtc::DataChannel> state_channel;
+    struct Connection{
+        std::shared_ptr<rtc::PeerConnection> peer_connection;
+        std::shared_ptr<rtc::DataChannel> out_video_channel;
+        std::shared_ptr<rtc::DataChannel> out_state_channel;
+        std::shared_ptr<rtc::DataChannel> in_out_mode_channel;
+        std::shared_ptr<rtc::DataChannel> in_manual_control_channel;
+        int control_udp_socket = -1;
+        sockaddr_in control_udp_addr{};
+    };
+    Connection connection;
 
     struct VideoStreamFrame{
         cv::Mat i420;

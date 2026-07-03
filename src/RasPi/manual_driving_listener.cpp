@@ -107,7 +107,7 @@ int main(){
 	float target_angle = 0.0f;
 
 	const float ALPHA_HEADING = 0.1f;
-	const float ALPHA_ANGLE = 0.15f;
+	const float ALPHA_ANGLE = 0.1f;
 
 	auto last_packet_time = std::chrono::steady_clock::now();
 	const std::chrono::milliseconds NETWORK_TIMEOUT(500);

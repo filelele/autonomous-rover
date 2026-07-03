@@ -1,43 +1,64 @@
-#include "DashboardListener.hpp"
+#include "ServerPhoneCommunication.hpp"
 #include "DashboardUI.hpp"
 #include <iostream>
 #include <thread>
 #include <string>
 #include <fstream>
 #include <cstdlib>
+#include <SDL2/SDL.h>
 
 int main() {
     std::cout << "Starting Ground Control Station..." << std::endl;
 
-    DashboardListener listener;
+    ServerPhoneCommunication communication;
     DashboardUI ui("Autonomous Rover Dashboard", 1280, 720);
 
-    //export TAILSCALE_PHONE_IP = 100.x.x.x
     const char* phone_ip_char = std::getenv("TAILSCALE_PHONE_IP");
+    std::string phone_ip = phone_ip_char;
     int port = 8888;
-    std::string phone_ip(phone_ip_char);
 
-    std::cout << "Initializing Listener. Waiting for Phone at " << phone_ip << ":" << port << "..." << std::endl;
-    std::thread listener_thread([&listener, phone_ip, port]() {
-        listener.initialize(phone_ip, port);
+    std::cout << "Initializing Communication. Waiting for Phone at " << phone_ip << ":" << port << "..." << std::endl;
+    std::thread comm_thread([&communication, phone_ip, port]() {
+        communication.initialize(phone_ip, port);
     });
+
+    auto last_control_send = std::chrono::steady_clock::now();
 
     // Main UI Loop
     while (ui.isRunning()) {
-        ui.handleEvents();
+        ui.handleEvents(communication);
 
-        auto frame = listener.getLatestBgr();
+        // Manual Control (20Hz)
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_control_send >= std::chrono::milliseconds(33)) {
+            last_control_send = now;
+
+            const Uint8* state = SDL_GetKeyboardState(NULL);
+            float heading = 0.0f;
+            float angle = 0.0f;
+
+            if (state[SDL_SCANCODE_W]) heading += 0.4f;
+            if (state[SDL_SCANCODE_S]) heading -= 0.4f;
+            if (state[SDL_SCANCODE_A]) angle -= 0.3f;
+            if (state[SDL_SCANCODE_D]) angle += 0.3f;
+
+            if (communication.getManualModeState()) {
+                communication.sendManualControl(heading, angle);
+            }
+        }
+
+        auto frame = communication.getLatestBgr();
         if (frame) {
-            ui.update(frame, listener.getIncomingFps());
+            ui.update(communication);
         } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     }
 
     std::cout << "Shutting down..." << std::endl;
-    listener.stopListening();
-    if (listener_thread.joinable()) {
-        listener_thread.join();
+    communication.stopCommunication();
+    if (comm_thread.joinable()) {
+        comm_thread.join();
     }
 
     return 0;

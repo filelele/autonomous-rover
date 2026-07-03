@@ -1,4 +1,4 @@
-#include "DashboardListener.hpp"
+#include "ServerPhoneCommunication.hpp"
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -7,10 +7,10 @@
 #include <chrono>
 
 
-DashboardListener::DashboardListener(){}
+ServerPhoneCommunication::ServerPhoneCommunication(){}
 
-DashboardListener::~DashboardListener() {
-    stopListening();
+ServerPhoneCommunication::~ServerPhoneCommunication() {
+    stopCommunication();
 }
 
 static bool readExact(int fd, void* buffer, size_t n) {
@@ -41,20 +41,20 @@ static std::string readPrefixed(int fd) {
     return msg;
 }
 
-void DashboardListener::initialize(const std::string& publisher_ip, int signalPort) {
+void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int signalPort) {
     if (is_initialized) return;
 
     while (is_running && !is_initialized) {
         rtc::Configuration config;
-        peer_connection = std::make_shared<rtc::PeerConnection>(config);
+        connection.peer_connection = std::make_shared<rtc::PeerConnection>(config);
 
-        peer_connection->onDataChannel([this](std::shared_ptr<rtc::DataChannel> channel) {
+        connection.peer_connection->onDataChannel([this](std::shared_ptr<rtc::DataChannel> channel) {
             std::string label = channel->label();
             std::cout << "[WebRTC] New DataChannel: " << label << std::endl;
 
-            if (label == "video_stream") {
-                video_channel = channel;
-                video_channel->onMessage([this](const rtc::message_variant& message) {
+            if (label == "video_channel") {
+                connection.in_video_channel = channel;
+                connection.in_video_channel->onMessage([this](const rtc::message_variant& message) {
                     if (std::holds_alternative<std::string>(message)) return;
 
                     const rtc::binary& packet = std::get<rtc::binary>(message);
@@ -111,23 +111,50 @@ void DashboardListener::initialize(const std::string& publisher_ip, int signalPo
                     cv::Mat gamma_corrected;
                     cv::LUT(bgr, cv::Mat(1, 256, CV_8U, lut), gamma_corrected);
 
-                    // Upsample from 384x216 to 1280x720
+                    // Upsample from 320x180 to 1280x720
                     // INTER_LANCZOS4 > INTER_CUBIC > INTER_LINEAR in quality, reverse in latency
                     cv::Mat upsampled;
                     cv::resize(gamma_corrected, upsampled, cv::Size(1280, 720), 0, 0, cv::INTER_LANCZOS4);
 
-                    bgr_buffer.store(std::make_shared<cv::Mat>(std::move(upsampled)), std::memory_order_release);
+                    in_out.in_bgr_buffer.store(std::make_shared<cv::Mat>(std::move(upsampled)), std::memory_order_release);
                 });
 
-                video_channel->onOpen([]() { std::cout << "[Video] Channel opened." << std::endl; });
-                video_channel->onClosed([]() { std::cout << "[Video] Channel closed." << std::endl; });
-            } else if (label == "state_stream") {
-                data_channel = channel;
-                data_channel->onOpen([]() { std::cout << "[State] Channel opened." << std::endl; });
+                connection.in_video_channel->onOpen([]() { std::cout << "[Video] Channel opened." << std::endl; });
+                connection.in_video_channel->onClosed([]() { std::cout << "[Video] Channel closed." << std::endl; });
+            } else if (label == "state_channel") {
+                connection.in_state_channel = channel;
+                connection.in_state_channel->onOpen([]() { std::cout << "[State] Channel opened." << std::endl; });
+                connection.in_state_channel->onClosed([]() { std::cout << "[State] Channel closed." << std::endl; });
+            } else if (label == "mode_channel"){
+                connection.in_out_mode_channel = channel;
+                connection.in_out_mode_channel->onMessage([this](const rtc::message_variant& message) {
+                    std::string msg_string;
+                    if (std::holds_alternative<std::string>(message)) {
+                        msg_string = std::get<std::string>(message);
+                    } else {
+                        const rtc::binary& packet = std::get<rtc::binary>(message);
+                        msg_string = std::string(reinterpret_cast<const char*>(packet.data()), packet.size());
+                    }
+
+                    // Format: "m1r0" or "m0r1" etc.
+                    for (size_t i = 0; i < msg_string.length(); ++i) {
+                        if (msg_string[i] == 'm' && i + 1 < msg_string.length()) {
+                            in_out.in_manual_mode_state.store(msg_string[i + 1] == '1', std::memory_order_release);
+                            i++;
+                        } else if (msg_string[i] == 'r' && i + 1 < msg_string.length()) {
+                            in_out.in_record_data_state.store(msg_string[i + 1] == '1', std::memory_order_release);
+                            i++;
+                        }
+                    }
+                });
+                connection.in_out_mode_channel->onOpen([]() { std::cout << "[Mode] Channel opened." << std::endl; });
+            } else if (label == "manual_control_channel"){
+                connection.out_manual_control_channel = channel;
+                connection.out_manual_control_channel->onOpen([]() { std::cout << "[ManualControl] Channel opened." << std::endl; });
             }
         });
 
-        peer_connection->onStateChange([this](rtc::PeerConnection::State state) {
+        connection.peer_connection->onStateChange([this](rtc::PeerConnection::State state) {
             std::cout << "[WebRTC] PeerConnection State: " << state << std::endl;
             if (state == rtc::PeerConnection::State::Disconnected ||
                 state == rtc::PeerConnection::State::Failed ||
@@ -136,15 +163,15 @@ void DashboardListener::initialize(const std::string& publisher_ip, int signalPo
             }
         });
 
-        peer_connection->onGatheringStateChange([](rtc::PeerConnection::GatheringState state) {
+        connection.peer_connection->onGatheringStateChange([](rtc::PeerConnection::GatheringState state) {
             std::cout << "[WebRTC] Gathering State: " << state << std::endl;
         });
 
         try {
             // Create a dummy data channel to ensure there's something to negotiate in the Offer
-            auto dummy = peer_connection->createDataChannel("initial_handshake");
+            auto dummy = connection.peer_connection->createDataChannel("initial_handshake_channel");
 
-            peer_connection->setLocalDescription(rtc::Description::Type::Offer);
+            connection.peer_connection->setLocalDescription(rtc::Description::Type::Offer);
         } catch (const std::exception& e) {
             std::cerr << "[Error] setLocalDescription failed: " << e.what() << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -152,18 +179,18 @@ void DashboardListener::initialize(const std::string& publisher_ip, int signalPo
         }
 
         int timeout_ms = 5000;
-        while (!peer_connection->localDescription().has_value() && timeout_ms > 0) {
+        while (!connection.peer_connection->localDescription().has_value() && timeout_ms > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             timeout_ms -= 10;
         }
 
-        if (!peer_connection->localDescription().has_value()) {
+        if (!connection.peer_connection->localDescription().has_value()) {
             std::cerr << "[Error] SDP Offer generation timeout." << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2));
             continue;
         }
 
-        std::string sdp_offer = std::string(peer_connection->localDescription().value());
+        std::string sdp_offer = std::string(connection.peer_connection->localDescription().value());
 
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) {
@@ -193,7 +220,7 @@ void DashboardListener::initialize(const std::string& publisher_ip, int signalPo
         std::string sdp_answer = readPrefixed(sock);
         if (!sdp_answer.empty()) {
             try {
-                peer_connection->setRemoteDescription(rtc::Description(sdp_answer, "answer"));
+                connection.peer_connection->setRemoteDescription(rtc::Description(sdp_answer, "answer"));
                 std::cout << "[Signaling] Received SDP Answer. Negotiating WebRTC..." << std::endl;
                 is_initialized = true;
             } catch (const std::exception& e) {
@@ -208,11 +235,30 @@ void DashboardListener::initialize(const std::string& publisher_ip, int signalPo
     }
 }
 
-std::shared_ptr<const cv::Mat> DashboardListener::getLatestBgr(){
-    return std::const_pointer_cast<const cv::Mat>(bgr_buffer.load(std::memory_order_acquire));
+std::shared_ptr<const cv::Mat> ServerPhoneCommunication::getLatestBgr(){
+    return std::const_pointer_cast<const cv::Mat>(in_out.in_bgr_buffer.load(std::memory_order_acquire));
 }
 
-void DashboardListener::stopListening() {
+void ServerPhoneCommunication::toggleManualMode() {
+    if (connection.in_out_mode_channel && connection.in_out_mode_channel->isOpen()) {
+        connection.in_out_mode_channel->send("m");
+    }
+}
+
+void ServerPhoneCommunication::toggleRecordData() {
+    if (connection.in_out_mode_channel && connection.in_out_mode_channel->isOpen()) {
+        connection.in_out_mode_channel->send("r");
+    }
+}
+
+void ServerPhoneCommunication::sendManualControl(float heading, float angle) {
+    if (connection.out_manual_control_channel && connection.out_manual_control_channel->isOpen()) {
+        std::string msg = std::to_string(heading) + "," + std::to_string(angle);
+        connection.out_manual_control_channel->send(msg);
+    }
+}
+
+void ServerPhoneCommunication::stopCommunication() {
     is_running.store(false, std::memory_order_release);
-    if (peer_connection) peer_connection->close();
+    if (connection.peer_connection) connection.peer_connection->close();
 }
