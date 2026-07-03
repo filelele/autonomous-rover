@@ -68,7 +68,7 @@ void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int s
                     auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 
                     int64_t latency_ms = (now_ns - frame_ts_ns) / 1000000;
-                    
+
                     if (latency_ms > 200) {
                         std::cout << "[Video] Dropping stale frame. Latency: " << latency_ms << "ms" << std::endl;
                         return;
@@ -253,8 +253,11 @@ void ServerPhoneCommunication::toggleRecordData() {
 
 void ServerPhoneCommunication::sendManualControl(float heading, float angle) {
     if (connection.out_manual_control_channel && connection.out_manual_control_channel->isOpen()) {
-        std::string msg = std::to_string(heading) + "," + std::to_string(angle);
-        connection.out_manual_control_channel->send(msg);
+        if (connection.out_manual_control_channel->bufferedAmount() == 0) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%.2f,%.2f", heading, angle);
+            connection.out_manual_control_channel->send(buf);
+        }
     }
 }
 

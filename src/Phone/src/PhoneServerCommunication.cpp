@@ -173,8 +173,8 @@ void PhoneServerCommunication::initialize(int signalPort){
             });
 
             rtc::DataChannelInit manual_control_config;
-            manual_control_config.reliability.maxRetransmits = 0;
             manual_control_config.reliability.unordered = true;
+            manual_control_config.reliability.maxPacketLifeTime = std::chrono::milliseconds(30);
             auto mmc = pc->createDataChannel("manual_control_channel", manual_control_config);
             mmc->onOpen([this, mmc]() {
                 LOGI("Manual Control Channel opened");
