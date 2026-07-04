@@ -7,10 +7,17 @@ export ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/30.0.14904198
 
 #install encrypt lib openssl for android ndk
 cd ./src/Shared 
-git clone https://github.com/openssl/openssl.git
+if [ ! -d "openssl" ]; then
+    git clone https://github.com/openssl/openssl.git
+fi
 cd openssl
 git checkout openssl-3.5.2
-./Configure android-arm64 --prefix=${PWD}/android-arm64 no-tests
+
+# OpenSSL needs ANDROID_NDK_ROOT and toolchain in PATH for Android builds
+export ANDROID_NDK_ROOT=${ANDROID_NDK_HOME}
+export PATH=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin:${PATH}
+
+./Configure android-arm64 -D__ANDROID_API__=30 --prefix=${PWD}/android-arm64 no-tests no-shared
 make -j$(nproc)
 make install_sw
 

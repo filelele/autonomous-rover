@@ -1,1 +1,63 @@
-temp/
+# Build artifacts
+build/
+**/build/
+.gradle/
+.cxx/
+**/cmake-build-*/
+**/.externalNativeBuild/
+bin/
+obj/
+
+# Android specific
+local.properties
+captures/
+.navigation/
+*.apk
+*.aar
+*.ap_
+*.dex
+*.class
+**/android_wrapper/app/src/main/jniLibs/arm64-v8a/libphone_app.so
+
+# C++ / CMake artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+*.o
+*.a
+*.so
+*.out
+ground_control_station
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.factorypath
+*.swp
+*~
+
+# Dependencies (downloaded/built locally)
+src/Phone/opencv-android/
+src/Shared/openssl/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+env/
+venv/
