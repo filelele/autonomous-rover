@@ -1,0 +1,35 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/src/Shared/include",
+                "${workspaceFolder}/src/Server/include",
+                "${workspaceFolder}/src/Server/build/_deps/datachannel-src/include",
+                "/usr/include/opencv4"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Android",
+            "includePath": [
+                "${workspaceFolder}/src/Phone/include",
+                "${workspaceFolder}/src/Shared/include",
+                "${workspaceFolder}/src/Phone/build/_deps/datachannel-src/include",
+                "${workspaceFolder}/src/Phone/opencv-android/sdk/native/jni/include",
+                "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
+                "${ANDROID_NDK_HOME}/sources/android/native_app_glue"
+
+            ],
+            "compilerPath": "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "clang-arm64"
+        }
+    ],
+    "version": 4
+}

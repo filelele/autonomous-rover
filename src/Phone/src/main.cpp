@@ -1,5 +1,5 @@
 #include <thread>
-#include <native_app_glue/android_native_app_glue.h>
+#include <native_app_glue/android_native_app_glue.h> //ignore intellisense complaint
 #include <android/log.h>
 #include <android/window.h>
 #include "FrameBuffer.hpp"
@@ -34,24 +34,21 @@ void handle_android_cmd(struct android_app* app, int32_t cmd) {
 void android_main(struct android_app* state) {
     LOGI("Phone app started");
 
-    FrameBuffer frame_buffer;
-    Camera camera(&frame_buffer);
+    FrameBuffer frame_buffer; // 1 producer, multiple consumer on this buffer.
+
+    Camera camera(&frame_buffer); // producer for camera frame buffer
     camera.init_camera();
     camera.start_stream();
 
     bool manual_mode = false;
     bool record_data = false;
     PhoneServerCommunication phone_server_communication(frame_buffer, manual_mode, record_data);
+    phone_server_communication.initialize(8888);
+    phone_server_communication.startCommunication();
 
     AppContext app_context = {&camera, &phone_server_communication};
     state->onAppCmd = handle_android_cmd;
     state->userData = &app_context;
-
-    //std::thread signaling_thread([&dashboard_publisher]() {
-    phone_server_communication.initialize(8888);
-    //});
-
-    phone_server_communication.startCommunication();
 
     while (true) {
         int ident;

@@ -16,8 +16,6 @@ set(USE_LIBCRYPTO OFF CACHE BOOL "")
 set(ENABLE_OPENSSL ON CACHE BOOL "")
 set(USE_MBEDTLS OFF CACHE BOOL "" FORCE)
 set(USE_GNUTLS OFF CACHE BOOL "" FORCE)
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DMBEDTLS_SSL_DTLS_SRTP")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMBEDTLS_SSL_DTLS_SRTP")
 
 set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
@@ -28,12 +26,10 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
     GIT_TAG        v0.23.3
 )
-
-set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Shared/openssl/android-arm64")
+set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl/android-arm64")
 set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include")
 set(OPENSSL_SSL_LIBRARY "${OPENSSL_ROOT_DIR}/lib/libssl.a")
 set(OPENSSL_CRYPTO_LIBRARY "${OPENSSL_ROOT_DIR}/lib/libcrypto.a")
-
 FetchContent_MakeAvailable(datachannel)
 
 # for native app glue lib
@@ -57,7 +53,7 @@ target_link_options(phone_app PRIVATE "-Wl,-u,ANativeActivity_onCreate")
 target_include_directories(phone_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/include
 )
-find_library(log-lib log) #that logd
+find_library(log-lib log)
 find_library(android-lib android) #native hardware access
 find_library(camera-lib camera2ndk)
 

@@ -10,3 +10,5 @@ cmake --build
 cmake --build . -j$(nproc)
 
 # the executable is ground_control_station
+
+cd ../../.. # back to project master directory

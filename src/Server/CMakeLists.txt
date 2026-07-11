@@ -27,7 +27,6 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
     GIT_TAG        v0.23.3
 )
-
 FetchContent_MakeAvailable(datachannel)
 
 # Submodules as static libs
