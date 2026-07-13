@@ -1,4 +1,4 @@
-#include "MyCamera.hpp"
+#include "Camera.hpp"
 #include "android/log.h"
 
 #include <utility>
@@ -58,7 +58,7 @@ bool Camera::init_camera() {
         int32_t height = entry.data.i32[i + 2];
         int32_t input  = entry.data.i32[i + 3];
 
-        // Only care about configs of 1920x1080, for now
+        // Only care about configs of 1920x1080
         if (input == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT && 
             format == AIMAGE_FORMAT_YUV_420_888 &&
             width == 1280 &&

@@ -3,7 +3,7 @@
 #include <android/log.h>
 #include <android/window.h>
 #include "FrameBuffer.hpp"
-#include "MyCamera.hpp"
+#include "Camera.hpp"
 #include "PhoneServerCommunication.hpp"
 
 #define TAG "Main"

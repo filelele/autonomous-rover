@@ -22,7 +22,7 @@ PhoneServerCommunication::PhoneServerCommunication(
     connection.control_udp_addr.sin_port = htons(12345);
 
     // PI_IP_BAKED is passed via CMake from the build environment
-    inet_pton(AF_INET, PI_IP_BAKED, &connection.control_udp_addr.sin_addr);
+    inet_pton(AF_INET, PI_IP, &connection.control_udp_addr.sin_addr);
     LOGI("Communication initialized with baked PI_IP: %s", PI_IP_BAKED);
 };
 

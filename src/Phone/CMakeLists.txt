@@ -6,10 +6,10 @@ set(CMAKE_CXX_STANDARD 20)
 # Get PI_IP from PC environment, or use a default if not set
 # set(PI_IP_VAL "100.x.x.x")
 if(DEFINED ENV{PI_IP})
-    set(PI_IP_VAL $ENV{PI_IP})
+    set(PI_IP $ENV{PI_IP})
 endif()
-add_definitions(-DPI_IP_BAKED="${PI_IP_VAL}")
-message(STATUS "Baking PI_IP: ${PI_IP_VAL}")
+add_definitions(-DPI_IP="${PI_IP}")
+message(STATUS "Baking PI_IP: ${PI_IP}")
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(USE_LIBCRYPTO OFF CACHE BOOL "")
@@ -45,7 +45,7 @@ find_package(OpenCV REQUIRED)
 add_library(phone_app SHARED
     src/main.cpp
     ../Shared/src/FrameBuffer.cpp
-    src/MyCamera.cpp
+    src/Camera.cpp
     src/PhoneServerCommunication.cpp
 )
 target_link_options(phone_app PRIVATE "-Wl,-u,ANativeActivity_onCreate")

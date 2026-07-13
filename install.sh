@@ -6,7 +6,7 @@ export ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/30.0.14904198
 # IPs is hardcoded
 
 # export TAILSCALE_PHONE_IP = "100.x.x.x"
-# export PI_IP = "100.x.x.x"
+# export PI_IP = "100.x.x.x" # raspi local IP in the Phone hotspot network
 
 # Build for Phone side
 # create the apk for Phone
