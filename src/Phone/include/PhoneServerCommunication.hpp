@@ -46,6 +46,7 @@ private:
         cv::Mat i420;
         cv::Mat bgr;
         cv::Mat resized;
+        cv::Mat filtered;
         std::vector<uint8_t> webp;
     };
     VideoStreamFrame video_stream_frame;

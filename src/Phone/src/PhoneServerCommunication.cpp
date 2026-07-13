@@ -23,7 +23,7 @@ PhoneServerCommunication::PhoneServerCommunication(
 
     // PI_IP_BAKED is passed via CMake from the build environment
     inet_pton(AF_INET, PI_IP, &connection.control_udp_addr.sin_addr);
-    LOGI("Communication initialized with baked PI_IP: %s", PI_IP_BAKED);
+    LOGI("Communication initialized with baked PI_IP: %s", PI_IP);
 };
 
 PhoneServerCommunication::~PhoneServerCommunication(){
@@ -254,12 +254,16 @@ const std::vector<uint8_t>& PhoneServerCommunication::convertToWebp(const FrameP
     resized.create(180, 320, CV_8UC3);
     cv::resize(bgr, resized, cv::Size(320,180), 0, 0, cv::INTER_AREA);
 
+    cv::Mat& filtered = video_stream_frame.filtered;
+    filtered.create(180, 320,  CV_8UC3);
+    cv::bilateralFilter(resized, filtered, 7, 75, 75);
+
     std::vector<uint8_t>& webp = video_stream_frame.webp;
     // Switch to WebP encoding
     // WebP typically provides better compression than JPEG at similar quality
     // Quality 65-75 is generally good for WebP lossy
-    cv::imencode(".webp", resized, webp, {cv::IMWRITE_WEBP_QUALITY, quality});
-
+    cv::imencode(".webp", filtered, webp, {cv::IMWRITE_WEBP_QUALITY, quality});
+    LOGI("Compressed frame size: %zu\n", webp.size());
     return webp;
 }
 
@@ -275,7 +279,7 @@ void PhoneServerCommunication::videoStream(){
     int64_t clock_offset_ns = real_ns - mono_ns;
 
     while(is_running){
-        std::this_thread::sleep_for(std::chrono::milliseconds(25)); //max 40fps
+        std::this_thread::sleep_for(std::chrono::milliseconds(20)); //max 50fps
         auto video_channel = connection.out_video_channel;
         if(!video_channel || !video_channel->isOpen()){
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
