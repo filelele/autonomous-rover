@@ -50,9 +50,9 @@ ground_control_station
 
 # Dependencies (downloaded/built locally)
 src/Phone/opencv-android/**
-src/Phone/opencv-android/.gitkeep
+!src/Phone/opencv-android/.gitkeep
 src/Phone/openssl/**
-src/Phone/openssl/.gitkeep
+!src/Phone/openssl/.gitkeep
 
 # Python
 __pycache__/
@@ -63,3 +63,6 @@ __pycache__/
 .venv
 env/
 venv/
+
+# Others
+**/tailscale_ip.json

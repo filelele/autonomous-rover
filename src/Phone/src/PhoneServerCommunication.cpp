@@ -8,6 +8,10 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <time.h>
+#include <cstdio>
+#include <cstring>
+
+#include <rtc/h265rtppacketizer.hpp>
 
 #define TAG "WebRTC_Publisher"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -21,7 +25,7 @@ PhoneServerCommunication::PhoneServerCommunication(
     connection.control_udp_addr.sin_family = AF_INET;
     connection.control_udp_addr.sin_port = htons(12345);
 
-    // PI_IP_BAKED is passed via CMake from the build environment
+    // PI_IP via env var
     inet_pton(AF_INET, PI_IP, &connection.control_udp_addr.sin_addr);
     LOGI("Communication initialized with baked PI_IP: %s", PI_IP);
 };
@@ -61,9 +65,20 @@ static bool sendPrefixed(int fd, const std::string& msg) {
     return true;
 }
 
-void PhoneServerCommunication::initialize(int signalPort){
+void PhoneServerCommunication::initialize(int controlSignalPort, int videoSignalPort){
     is_running = true;
-    
+    if (!controlSignalingLoop(controlSignalPort)) {
+        LOGE("Control signaling setup failed.");
+        return;
+    }
+    if (!videoSignalingLoop(videoSignalPort)) {
+        LOGE("Video signaling setup failed.");
+        return;
+    }
+}
+
+bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
+    LOGI("Control signaling thread started on port %d", signalPort);
     int serverFd = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
     setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -76,33 +91,25 @@ void PhoneServerCommunication::initialize(int signalPort){
     if (bind(serverFd, (struct sockaddr*)&address, sizeof(address)) < 0) {
         LOGE("Bind failed on port %d", signalPort);
         close(serverFd);
-        return;
+        return false;
     }
     listen(serverFd, 5);
-    
-    LOGI("Signaling server listening on port %d...", signalPort);
-
-    bool is_initialized = false;
-    while (is_running && !is_initialized) {
+    bool connection_established = false;
+    while (!connection_established) {
         struct pollfd pfd;
         pfd.fd = serverFd;
         pfd.events = POLLIN;
-        int res = poll(&pfd, 1, 500); // 500ms timeout
+        int res = poll(&pfd, 1, 1000);
 
-        if (res == 0) continue;
-        if (res < 0) {
-            if (errno == EINTR) continue;
-            LOGE("Poll error: %s", strerror(errno));
-            break;
-        }
+        if (res <= 0) continue;
 
         int clientFd = accept(serverFd, nullptr, nullptr);
         if (clientFd < 0) continue;
 
-        LOGI("PC connected. Receiving SDP Offer...");
+        LOGI("Control PC connected. Receiving SDP Offer...");
         std::string pc_offer = readPrefixed(clientFd);
         if (pc_offer.empty()) {
-            LOGE("Failed to read SDP Offer from PC.");
+            LOGE("Failed to read control SDP Offer from PC.");
             close(clientFd);
             continue;
         }
@@ -113,210 +120,240 @@ void PhoneServerCommunication::initialize(int signalPort){
             
             pc->onStateChange([this, pc](rtc::PeerConnection::State state) {
                 LOGI("PeerConnection State: %d", (int)state);
-                if (state == rtc::PeerConnection::State::Connected) {
-                    this->connection.peer_connection = pc;
+                if (state == rtc::PeerConnection::State::Disconnected || state == rtc::PeerConnection::State::Failed) {
+                    // Cleanup current connection if needed
                 }
             });
 
-            rtc::DataChannelInit video_config;
-            video_config.reliability.unordered = true;
-            video_config.reliability.maxPacketLifeTime = std::chrono::milliseconds(20);
-            auto vc = pc->createDataChannel("video_channel", video_config);
-
-            vc->onOpen([this, vc]() {
-                LOGI("WebRTC Webp Video Channel opened.");
-                this->connection.out_video_channel = vc;
+            pc->onGatheringStateChange([](rtc::PeerConnection::GatheringState state) {
+                LOGI("Gathering State: %d", (int)state);
             });
 
-            rtc::DataChannelInit state_config;
-            state_config.reliability.unordered = true;
-            state_config.reliability.maxRetransmits = 0;
-            auto sc = pc->createDataChannel("state_channel", state_config);
-            sc->onOpen([this, sc]() {
-                LOGI("State Channel opened.");
-                this->connection.out_state_channel = sc;
-            });
+            pc->onDataChannel([this](std::shared_ptr<rtc::DataChannel> channel) {
+                std::string label = channel->label();
+                LOGI("DataChannel received: %s", label.c_str());
 
-            rtc::DataChannelInit mode_config;
-            mode_config.reliability.maxRetransmits = 10;
-            mode_config.reliability.unordered = false;
-            auto mc = pc->createDataChannel("mode_channel", mode_config);
+                if (label == "state_channel") {
 
-            auto sendState = [this, mc]() {
-                std::string state = "";
-                state += (manual_mode ? "m1" : "m0");
-                state += (record_data ? "r1" : "r0");
-                mc->send(state);
-            };
+                    channel->onOpen([this, channel](){
+                        this->connection.out_state_channel = channel;
+                        LOGI("State channel opened");
+                    });
 
-            mc->onOpen([this, mc, sendState]() {
-                LOGI("Mode Channel opened");
-                this->connection.in_out_mode_channel = mc;
-                sendState();
-            });
+                } else if (label == "mode_channel") {
 
-            mc->onMessage([this, sendState](const rtc::message_variant& message) {
-                std::string msg_string;
-                if (std::holds_alternative<std::string>(message)) {
-                    msg_string = std::get<std::string>(message);
-                } else {
-                    const rtc::binary& packet = std::get<rtc::binary>(message);
-                    msg_string = std::string(reinterpret_cast<const char*>(packet.data()), packet.size());
-                }
+                    auto sendState = [this, channel]() {
+                        std::string state = "";
+                        state += (manual_mode ? "m1" : "m0");
+                        state += (record_data ? "r1" : "r0");
+                        channel->send(state);
+                    };
 
-                if (msg_string.length() == 1) {
-                    if (msg_string[0] == 'm') manual_mode = !manual_mode;
-                    else if (msg_string[0] == 'r') record_data = !record_data;
-                    else return;
-                    sendState();
-                }
-            });
+                    channel->onOpen([this, channel, sendState](){
+                        LOGI("Mode channel opened");
+                        this->connection.in_out_mode_channel = channel;
+                        sendState();
+                    });
 
-            rtc::DataChannelInit manual_control_config;
-            manual_control_config.reliability.unordered = false;
-            manual_control_config.reliability.maxPacketLifeTime = std::chrono::milliseconds(10);
-            auto mmc = pc->createDataChannel("manual_control_channel", manual_control_config);
-            mmc->onOpen([this, mmc]() {
-                LOGI("Manual Control Channel opened");
-                this->connection.in_manual_control_channel = mmc;
-            });
+                    channel->onMessage([this, sendState](const rtc::message_variant& message) {
+                        std::string msg_string;
+                        if (std::holds_alternative<std::string>(message)) {
+                            msg_string = std::get<std::string>(message);
+                        } else {
+                            const rtc::binary& packet = std::get<rtc::binary>(message);
+                            msg_string = std::string(reinterpret_cast<const char*>(packet.data()), packet.size());
+                        }
 
-            mmc->onMessage([this](const rtc::message_variant& message) {
-                if (!manual_mode) return;
-                if (std::holds_alternative<std::string>(message)) {
-                    std::string msg = std::get<std::string>(message);
-                    sendto(connection.control_udp_socket, msg.c_str(), msg.size(), 0,
-                           (struct sockaddr*)&connection.control_udp_addr, sizeof(connection.control_udp_addr));
-                } else {
-                    const rtc::binary& packet = std::get<rtc::binary>(message);
-                    sendto(connection.control_udp_socket, packet.data(), packet.size(), 0,
-                           (struct sockaddr*)&connection.control_udp_addr, sizeof(connection.control_udp_addr));
+                        if (msg_string.length() == 1) {
+                            if (msg_string[0] == 'm') manual_mode = !manual_mode;
+                            else if (msg_string[0] == 'r') record_data = !record_data;
+                            else return;
+                            sendState();
+                        }
+                    });
+
+                } else if (label == "manual_control_channel") {
+
+                    channel->onOpen([this, channel](){
+                        this->connection.in_manual_control_channel = channel;
+                        LOGI("Manual control channel opened");
+                    });
+
+                    channel->onMessage([this](const rtc::message_variant& message) {
+                        if (!manual_mode) return;
+                        if (std::holds_alternative<std::string>(message)) {
+                            std::string msg = std::get<std::string>(message);
+                            sendto(connection.control_udp_socket, msg.c_str(), msg.size(), 0,
+                                (struct sockaddr*)&connection.control_udp_addr, sizeof(connection.control_udp_addr));
+                        } else {
+                            const rtc::binary& packet = std::get<rtc::binary>(message);
+                            sendto(connection.control_udp_socket, packet.data(), packet.size(), 0,
+                                (struct sockaddr*)&connection.control_udp_addr, sizeof(connection.control_udp_addr));
+                        }
+                    });
+
                 }
             });
 
-            
             pc->setRemoteDescription(rtc::Description(pc_offer, "offer"));
-            LOGI("Set Remote Description success.");
+            LOGI("Set Remote Description. Gathering candidates...");
 
-            // libdatachannel generates Answer automatically on setRemoteDescription above
-            int timeout_ms = 5000;
-            while (!pc->localDescription().has_value() && timeout_ms > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                timeout_ms -= 10;
+            int wait_ms = 3000;
+            while (pc->gatheringState() != rtc::PeerConnection::GatheringState::Complete && wait_ms > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                wait_ms -= 20;
             }
 
             if(pc->localDescription().has_value()) {
                 std::string phone_answer = std::string(pc->localDescription().value());
                 if (sendPrefixed(clientFd, phone_answer)) {
-                    LOGI("Sent Phone SDP Answer back to PC.");
-                    is_initialized = true;
-                } else {
-                    LOGE("Failed to send SDP Answer.");
+                    LOGI("Control answer sent to GCS. Connection should establish now.");
+                    this->connection.control_peer_connection = pc;
                 }
-            } else {
-                LOGE("SDP Answer generation timeout.");
             }
         } catch (const std::exception& e) {
-            LOGE("WebRTC Handshake error: %s", e.what());
+            LOGE("Control handshake failure: %s", e.what());
         }
-
         close(clientFd);
+        connection_established = true;
     }
     close(serverFd);
-    LOGI("Signaling initialize() finished.");
+    return connection_established;
 }
 
+bool PhoneServerCommunication::videoSignalingLoop(int signalPort) {
+    LOGI("Video signaling thread started on port %d", signalPort);
+    int serverFd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-const std::vector<uint8_t>& PhoneServerCommunication::convertToWebp(const FramePtr& frame, int quality = 75) {
-    int w = frame->width;
-    int h = frame->height;
-    
-    // YUV420p: Chroma U and V half Y
-    int chromaW = w / 2;
-    int chromaH = h / 2;
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(signalPort);
 
-    // zero-copy
-    cv::Mat y(h,        w,       CV_8UC1, const_cast<uint8_t*>(frame->planes[0].data.data()));
-    cv::Mat u(chromaH,  chromaW, CV_8UC1, const_cast<uint8_t*>(frame->planes[1].data.data()));
-    cv::Mat v(chromaH,  chromaW, CV_8UC1, const_cast<uint8_t*>(frame->planes[2].data.data()));
+    if (bind(serverFd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        LOGE("Bind failed on port %d", signalPort);
+        close(serverFd);
+        return false;
+    }
+    listen(serverFd, 5);
 
-    cv::Mat& i420 = video_stream_frame.i420;
-    i420.create(h * 3 / 2, w, CV_8UC1);
-    memcpy(i420.ptr(0), y.data, w * h);
-    memcpy(i420.ptr(h), u.data, w * h / 4);
-    memcpy(i420.ptr(h) + w * h / 4, v.data, w * h / 4);
-    
-    cv::Mat& bgr = video_stream_frame.bgr;
-    bgr.create(h, w, CV_8UC3);
-    cv::cvtColor(i420, bgr, cv::COLOR_YUV2BGR_I420);
+    bool connection_established = false;
+    while (!connection_established) {
+        struct pollfd pfd;
+        pfd.fd = serverFd;
+        pfd.events = POLLIN;
+        int res = poll(&pfd, 1, 1000);
+        if (res <= 0) continue;
 
-    cv::Mat& resized = video_stream_frame.resized;
-    resized.create(180, 320, CV_8UC3);
-    cv::resize(bgr, resized, cv::Size(320,180), 0, 0, cv::INTER_AREA);
+        int clientFd = accept(serverFd, nullptr, nullptr);
+        if (clientFd < 0) continue;
 
-    cv::Mat& filtered = video_stream_frame.filtered;
-    filtered.create(180, 320,  CV_8UC3);
-    cv::bilateralFilter(resized, filtered, 7, 75, 75);
-
-    std::vector<uint8_t>& webp = video_stream_frame.webp;
-    // Switch to WebP encoding
-    // WebP typically provides better compression than JPEG at similar quality
-    // Quality 65-75 is generally good for WebP lossy
-    cv::imencode(".webp", filtered, webp, {cv::IMWRITE_WEBP_QUALITY, quality});
-    LOGI("Compressed frame size: %zu\n", webp.size());
-    return webp;
-}
-
-void PhoneServerCommunication::videoStream(){
-    int64_t lastTimestamp = 0;
-
-    // Convert Monotonic clock (used by ACamera) to Realtime clock Unix Epoch
-    struct timespec ts_mono, ts_real;
-    clock_gettime(CLOCK_MONOTONIC, &ts_mono);
-    clock_gettime(CLOCK_REALTIME, &ts_real);
-    int64_t mono_ns = static_cast<int64_t>(ts_mono.tv_sec) * 1000000000LL + ts_mono.tv_nsec;
-    int64_t real_ns = static_cast<int64_t>(ts_real.tv_sec) * 1000000000LL + ts_real.tv_nsec;
-    int64_t clock_offset_ns = real_ns - mono_ns;
-
-    while(is_running){
-        std::this_thread::sleep_for(std::chrono::milliseconds(20)); //max 50fps
-        auto video_channel = connection.out_video_channel;
-        if(!video_channel || !video_channel->isOpen()){
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        LOGI("Video PC connected. Receiving SDP Offer...");
+        std::string pc_offer = readPrefixed(clientFd);
+        if (pc_offer.empty()) {
+            LOGE("Failed to read video SDP Offer from PC.");
+            close(clientFd);
             continue;
         }
 
-        if (video_channel->bufferedAmount() > 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        try {
+            rtc::Configuration config;
+            auto pc = std::make_shared<rtc::PeerConnection>(config);
+
+            pc->onStateChange([this, pc](rtc::PeerConnection::State state) {
+                LOGI("[Video] PeerConnection State: %d", (int)state);
+                if (state == rtc::PeerConnection::State::Disconnected || state == rtc::PeerConnection::State::Failed) {
+                }
+            });
+
+            pc->onGatheringStateChange([](rtc::PeerConnection::GatheringState state) {
+                LOGI("[Video] Gathering State: %d", (int)state);
+            });
+
+            pc->onTrack([this](std::shared_ptr<rtc::Track> track) {
+                std::string type = track->description().type();
+                LOGI("[Video] Track received, mid: %s, type: %s", track->mid().c_str(), type.c_str());
+
+                if (type == "video") {
+                    auto h265Config = std::make_shared<rtc::RtpPacketizationConfig>(rtc::SSRC(0), "H265", 96, 90000);
+                    auto h265Packetizer = std::make_shared<rtc::H265RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, h265Config);
+
+                    track->setMediaHandler(h265Packetizer);
+
+                    track->onOpen([this, track]() {
+                        this->connection.out_video_track = track;
+                        LOGI("Video track ready to send frames.");
+                        if (this->encoder) this->encoder->requestKeyFrame();
+                    });
+                }
+            });
+
+            pc->setRemoteDescription(rtc::Description(pc_offer, "offer"));
+            LOGI("Set video remote description. Gathering candidates...");
+
+            int wait_ms = 3000;
+            while (pc->gatheringState() != rtc::PeerConnection::GatheringState::Complete && wait_ms > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                wait_ms -= 20;
+            }
+
+            if (pc->localDescription().has_value()) {
+                std::string phone_answer = std::string(pc->localDescription().value());
+                if (sendPrefixed(clientFd, phone_answer)) {
+                    LOGI("Video answer sent to GCS. Connection should establish now.");
+                    this->connection.video_peer_connection = pc;
+                    connection_established = true;
+                }
+            }
+        } catch (const std::exception& e) {
+            LOGE("Video handshake failure: %s", e.what());
+        }
+        close(clientFd);
+    }
+    close(serverFd);
+    return connection_established;
+}
+
+void PhoneServerCommunication::videoStream(){
+    LOGI("Video stream thread started.");
+    while(is_running){
+        std::this_thread::sleep_for(std::chrono::milliseconds(25)); // Max 50fps
+
+        auto video_track = connection.out_video_track;
+        if(!video_track || !video_track->isOpen()){
             continue;
         }
 
         FramePtr frame = frame_buffer.get_latest_frame();
-        if(!frame){
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            continue;
+        if(!frame) continue;
+
+        // Initialize encoder once
+        if (!encoder) {
+            encoder = std::make_unique<H265Encoder>();
+            if (!encoder->initialize(frame->width, frame->height, 450000, 25, 75)) {
+                LOGE("Encoder init failed.");
+                encoder.reset();
+            } else {
+                LOGI("Encoder initialized at %dx%d.", frame->width, frame->height);
+                encoder->setCallback([this](const uint8_t* data, size_t size, bool isConfig, bool isKey, int64_t pts_us){
+                    auto vt = this->connection.out_video_track;
+                    if (!vt || !vt->isOpen()) return;
+
+                    uint32_t timestamp = static_cast<uint32_t>(pts_us * 90 / 1000);
+                    rtc::FrameInfo info(timestamp);
+                    vt->sendFrame(reinterpret_cast<const rtc::byte*>(data), size, info);
+                });
+            }
         }
-        if(frame->timestamp_ns == lastTimestamp){
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;
-        }else{
-            lastTimestamp = frame->timestamp_ns;
-        }
 
-        const auto& webp = convertToWebp(frame, 40);
-
-        // Prepare packet: [int64_t timestamp_ns (Unix Epoch)][webp]
-        std::vector<std::byte> packet(sizeof(int64_t) + webp.size());
-        int64_t epoch_ts_ns = frame->timestamp_ns + clock_offset_ns;
-        std::memcpy(packet.data(), &epoch_ts_ns, sizeof(int64_t));
-        std::memcpy(packet.data() + sizeof(int64_t), webp.data(), webp.size());
-
-        try {
-            video_channel->send(packet.data(), packet.size());
-        } catch (const std::exception& e) {
-            LOGE("Failed to send video frame: %s", e.what());
+        if (encoder) {
+            if(connection.out_video_track->bufferedAmount() > send_buffer_limit_bytes) continue;
+            else encoder->encodeFrame(frame);
         }
     }
+    LOGI("Video stream thread exiting.");
 }
 
 void PhoneServerCommunication::stateStream(){
@@ -327,11 +364,15 @@ void PhoneServerCommunication::stateStream(){
 
 void PhoneServerCommunication::startCommunication(){
     video_stream_thread = std::thread(&PhoneServerCommunication::videoStream, this);
-    //state_stream_thread = std::thread(&PhoneServerCommunication::stateStream, this);
 }
 
 void PhoneServerCommunication::stopCommunication(){
-    is_running.store(false, std::memory_order_release);
     if (video_stream_thread.joinable()) video_stream_thread.join(); 
-    //if (state_stream_thread.joinable()) state_stream_thread.join();
+    is_running.store(false, std::memory_order_release);
+    if (encoder) {
+        encoder->stop();
+        encoder.reset();
+    }
+    if (connection.control_peer_connection) connection.control_peer_connection->close();
+    if (connection.video_peer_connection) connection.video_peer_connection->close();
 }
