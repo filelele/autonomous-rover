@@ -5,12 +5,17 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <chrono>
+#include <cstring>
+#include <rtc/h265rtpdepacketizer.hpp>
 
-
-ServerPhoneCommunication::ServerPhoneCommunication(){}
+ServerPhoneCommunication::ServerPhoneCommunication() {
+    is_running = true;
+    decoder_thread = std::thread(&ServerPhoneCommunication::decoderWorker, this);
+}
 
 ServerPhoneCommunication::~ServerPhoneCommunication() {
     stopCommunication();
+    if (decoder_thread.joinable()) decoder_thread.join();
 }
 
 static bool readExact(int fd, void* buffer, size_t n) {
@@ -41,197 +46,177 @@ static std::string readPrefixed(int fd) {
     return msg;
 }
 
-void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int signalPort) {
+void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int controlSignalPort, int videoSignalPort) {
     if (is_initialized) return;
 
+    rtcSctpSettings sctpSettings;
+    memset(&sctpSettings, 0, sizeof(sctpSettings));
+    sctpSettings.sendBufferSize = 64 * 1024;
+    sctpSettings.maxChunksOnQueue = 1024;
+    rtcSetSctpSettings(&sctpSettings);
+
+    decoder.initialize();
+
     while (is_running && !is_initialized) {
+        // Control peer connection: data channels only
         rtc::Configuration config;
-        connection.peer_connection = std::make_shared<rtc::PeerConnection>(config);
-
-        connection.peer_connection->onDataChannel([this](std::shared_ptr<rtc::DataChannel> channel) {
-            std::string label = channel->label();
-            std::cout << "[WebRTC] New DataChannel: " << label << std::endl;
-
-            if (label == "video_channel") {
-                connection.in_video_channel = channel;
-                connection.in_video_channel->onMessage([this](const rtc::message_variant& message) {
-                    if (std::holds_alternative<std::string>(message)) return;
-
-                    const rtc::binary& packet = std::get<rtc::binary>(message);
-                    if (packet.size() < sizeof(int64_t)) return;
-
-                    int64_t frame_ts_ns;
-                    std::memcpy(&frame_ts_ns, packet.data(), sizeof(int64_t));
-
-                    // Both sides synced to Unix Epoch Time
-                    auto now = std::chrono::system_clock::now();
-                    auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
-
-                    int64_t latency_ms = (now_ns - frame_ts_ns) / 1000000;
-
-                    if (latency_ms > 200) {
-                        std::cout << "[Video] Dropping stale frame. Latency: " << latency_ms << "ms" << std::endl;
-                        return;
-                    }
-
-                    packet_counter.packet_accumulator++;
-
-                    auto now_steady = std::chrono::steady_clock::now();
-                    std::chrono::duration<double> elapsed = now_steady - packet_counter.window_start;
-
-                    // every 1 sec
-                    if (elapsed.count() >= 1.0) {
-                        packet_counter.incoming_fps = packet_counter.packet_accumulator / elapsed.count();
-                        packet_counter.packet_accumulator = 0;
-                        packet_counter.window_start = now_steady;
-                    }
-
-                    const std::byte* webp_data = packet.data() + sizeof(int64_t);
-                    size_t webp_size = packet.size() - sizeof(int64_t);
-
-                    cv::Mat encoded(1, static_cast<int>(webp_size), CV_8UC1, const_cast<std::byte*>(webp_data));
-                    cv::Mat bgr = cv::imdecode(encoded, cv::IMREAD_COLOR);
-
-                    if (bgr.empty()) {
-                        std::cerr << "[Video] Failed to decode WebP." << std::endl;
-                        return;
-                    }
-
-                    // Gamma Correction (gamma = 1.4)
-                    // Precompute LUT for faster performance
-                    static unsigned char lut[256];
-                    static bool lut_ready = false;
-                    if (!lut_ready) {
-                        double gamma = 1.4;
-                        for (int i = 0; i < 256; i++) {
-                            lut[i] = cv::saturate_cast<uchar>(pow(i / 255.0, 1.0 / gamma) * 255.0);
-                        }
-                        lut_ready = true;
-                    }
-                    cv::Mat gamma_corrected;
-                    cv::LUT(bgr, cv::Mat(1, 256, CV_8U, lut), gamma_corrected);
-
-                    // Upsample from 320x180 to 1280x720
-                    // INTER_LANCZOS4 > INTER_CUBIC > INTER_LINEAR in quality, reverse in latency
-                    cv::Mat upsampled;
-                    cv::resize(gamma_corrected, upsampled, cv::Size(1280, 720), 0, 0, cv::INTER_LANCZOS4);
-
-                    in_out.in_bgr_buffer.store(std::make_shared<cv::Mat>(std::move(upsampled)), std::memory_order_release);
-                });
-
-                connection.in_video_channel->onOpen([]() { std::cout << "[Video] Channel opened." << std::endl; });
-                connection.in_video_channel->onClosed([]() { std::cout << "[Video] Channel closed." << std::endl; });
-            } else if (label == "state_channel") {
-                connection.in_state_channel = channel;
-                connection.in_state_channel->onOpen([]() { std::cout << "[State] Channel opened." << std::endl; });
-                connection.in_state_channel->onClosed([]() { std::cout << "[State] Channel closed." << std::endl; });
-            } else if (label == "mode_channel"){
-                connection.in_out_mode_channel = channel;
-                connection.in_out_mode_channel->onMessage([this](const rtc::message_variant& message) {
-                    std::string msg_string;
-                    if (std::holds_alternative<std::string>(message)) {
-                        msg_string = std::get<std::string>(message);
-                    } else {
-                        const rtc::binary& packet = std::get<rtc::binary>(message);
-                        msg_string = std::string(reinterpret_cast<const char*>(packet.data()), packet.size());
-                    }
-
-                    // Format: "m1r0" or "m0r1" etc.
-                    for (size_t i = 0; i < msg_string.length(); ++i) {
-                        if (msg_string[i] == 'm' && i + 1 < msg_string.length()) {
-                            in_out.in_manual_mode_state.store(msg_string[i + 1] == '1', std::memory_order_release);
-                            i++;
-                        } else if (msg_string[i] == 'r' && i + 1 < msg_string.length()) {
-                            in_out.in_record_data_state.store(msg_string[i + 1] == '1', std::memory_order_release);
-                            i++;
-                        }
-                    }
-                });
-                connection.in_out_mode_channel->onOpen([]() { std::cout << "[Mode] Channel opened." << std::endl; });
-            } else if (label == "manual_control_channel"){
-                connection.out_manual_control_channel = channel;
-                connection.out_manual_control_channel->onOpen([]() { std::cout << "[ManualControl] Channel opened." << std::endl; });
-            }
-        });
-
-        connection.peer_connection->onStateChange([this](rtc::PeerConnection::State state) {
-            std::cout << "[WebRTC] PeerConnection State: " << state << std::endl;
-            if (state == rtc::PeerConnection::State::Disconnected ||
-                state == rtc::PeerConnection::State::Failed ||
-                state == rtc::PeerConnection::State::Closed) {
+        auto control_pc = std::make_shared<rtc::PeerConnection>(config);
+        control_pc->onStateChange([this](rtc::PeerConnection::State state) {
+            std::cout << "[WebRTC] PeerConnection State: " << (int)state << std::endl;
+            if (state == rtc::PeerConnection::State::Disconnected || state == rtc::PeerConnection::State::Failed) {
                 is_initialized = false;
             }
         });
 
-        connection.peer_connection->onGatheringStateChange([](rtc::PeerConnection::GatheringState state) {
-            std::cout << "[WebRTC] Gathering State: " << state << std::endl;
+        //state channel
+        rtc::DataChannelInit state_channel_config;
+        state_channel_config.reliability.unordered = true;
+        state_channel_config.reliability.maxPacketLifeTime = std::chrono::milliseconds(20);
+        connection.in_state_channel = control_pc->createDataChannel("state_channel", state_channel_config);
+
+        //mode_channel
+        rtc::DataChannelInit mode_channel_config;
+        mode_channel_config.reliability.unordered = false;
+        mode_channel_config.reliability.maxRetransmits = 3;
+        connection.in_out_mode_channel = control_pc->createDataChannel("mode_channel", mode_channel_config);
+        connection.in_out_mode_channel->onMessage([this](const rtc::message_variant& message) {
+            std::string msg_string;
+            if (std::holds_alternative<std::string>(message)) msg_string = std::get<std::string>(message);
+            else msg_string = std::string(reinterpret_cast<const char*>(std::get<rtc::binary>(message).data()), std::get<rtc::binary>(message).size());
+
+            for (size_t i = 0; i < msg_string.length(); ++i) {
+                if (msg_string[i] == 'm' && i + 1 < msg_string.length()) {
+                    in_out.in_manual_mode_state.store(msg_string[i + 1] == '1', std::memory_order_release);
+                    i++;
+                } else if (msg_string[i] == 'r' && i + 1 < msg_string.length()) {
+                    in_out.in_record_data_state.store(msg_string[i + 1] == '1', std::memory_order_release);
+                    i++;
+                }
+            }
         });
 
-        try {
-            // Create a dummy data channel to ensure there's something to negotiate in the Offer
-            auto dummy = connection.peer_connection->createDataChannel("initial_handshake_channel");
+        //manual_control_channel
+        rtc::DataChannelInit manual_control_channel_config;
+        manual_control_channel_config.reliability.unordered = true;
+        manual_control_channel_config.reliability.maxPacketLifeTime = std::chrono::milliseconds(20); 
+        //smaller than 25ms, the rate of new control arrival
+        connection.out_manual_control_channel = control_pc->createDataChannel("manual_control_channel", manual_control_channel_config);
 
-            connection.peer_connection->setLocalDescription(rtc::Description::Type::Offer);
-        } catch (const std::exception& e) {
-            std::cerr << "[Error] setLocalDescription failed: " << e.what() << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            continue;
-        }
+        control_pc->setLocalDescription(rtc::Description::Type::Offer);
 
         int timeout_ms = 5000;
-        while (!connection.peer_connection->localDescription().has_value() && timeout_ms > 0) {
+        while (!control_pc->localDescription().has_value() && timeout_ms > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             timeout_ms -= 10;
         }
-
-        if (!connection.peer_connection->localDescription().has_value()) {
-            std::cerr << "[Error] SDP Offer generation timeout." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            continue;
-        }
-
-        std::string sdp_offer = std::string(connection.peer_connection->localDescription().value());
+        if (!control_pc->localDescription().has_value()) continue;
 
         int sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock < 0) {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            continue;
-        }
-
         sockaddr_in serv_addr;
         serv_addr.sin_family = AF_INET;
-        serv_addr.sin_port = htons(signalPort);
+        serv_addr.sin_port = htons(controlSignalPort);
         inet_pton(AF_INET, publisher_ip.c_str(), &serv_addr.sin_addr);
 
         if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-            std::cerr << "[Signaling] Phone not ready. Retrying..." << std::endl;
             close(sock);
-            std::this_thread::sleep_for(std::chrono::seconds(2));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
-        if (!sendPrefixed(sock, sdp_offer)) {
-            std::cerr << "[Error] Failed to send Offer." << std::endl;
-            close(sock);
-            continue;
-        }
-        std::cout << "[Signaling] Sent SDP Offer" << std::endl;
-
+        sendPrefixed(sock, std::string(control_pc->localDescription().value()));
         std::string sdp_answer = readPrefixed(sock);
         if (!sdp_answer.empty()) {
-            try {
-                connection.peer_connection->setRemoteDescription(rtc::Description(sdp_answer, "answer"));
-                std::cout << "[Signaling] Received SDP Answer. Negotiating WebRTC..." << std::endl;
-                is_initialized = true;
-            } catch (const std::exception& e) {
-                std::cerr << "[Error] Failed to set remote description: " << e.what() << std::endl;
+            control_pc->setRemoteDescription(rtc::Description(sdp_answer, "answer"));
+            connection.control_peer_connection = control_pc;
+            std::cout << "[Control Signaling] Handshake complete." << std::endl;
+        }
+        close(sock);
+
+        // Video peer connection: video track only
+        rtc::Configuration video_config;
+        auto video_pc = std::make_shared<rtc::PeerConnection>(video_config);
+        video_pc->onStateChange([this](rtc::PeerConnection::State state) {
+            std::cout << "[WebRTC-Video] PeerConnection State: " << (int)state << std::endl;
+            if (state == rtc::PeerConnection::State::Disconnected || state == rtc::PeerConnection::State::Failed) {
+                is_initialized = false;
             }
-        } else {
-            std::cerr << "[Error] Failed to receive valid Answer." << std::endl;
+        });
+
+        rtc::Description::Video video("video", rtc::Description::Direction::RecvOnly);
+        video.addH265Codec(96);
+        auto vt = video_pc->addTrack(video);
+        connection.in_video_track = vt;
+        auto h265Depacketizer = std::make_shared<rtc::H265RtpDepacketizer>(rtc::NalUnit::Separator::StartSequence);
+        vt->setMediaHandler(h265Depacketizer);
+        vt->onFrame([this](rtc::binary data, rtc::FrameInfo info) {
+            {
+                std::lock_guard<std::mutex> qlk(queue_mutex);
+                decode_queue.push({std::move(data), static_cast<uint64_t>(info.timestamp)});
+                while (decode_queue.size() > 2) decode_queue.pop();
+            }
+            queue_cv.notify_one();
+            fps_counter.frame_accumulator++;
+        });
+
+        video_pc->setLocalDescription(rtc::Description::Type::Offer);
+
+        timeout_ms = 5000;
+        while (!video_pc->localDescription().has_value() && timeout_ms > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            timeout_ms -= 10;
+        }
+        if (!video_pc->localDescription().has_value()) continue;
+
+        int video_sock = socket(AF_INET, SOCK_STREAM, 0);
+        sockaddr_in video_serv_addr;
+        video_serv_addr.sin_family = AF_INET;
+        video_serv_addr.sin_port = htons(videoSignalPort);
+        inet_pton(AF_INET, publisher_ip.c_str(), &video_serv_addr.sin_addr);
+
+        if (connect(video_sock, (struct sockaddr *)&video_serv_addr, sizeof(video_serv_addr)) < 0) {
+            close(video_sock);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            continue;
         }
 
-        close(sock);
-        if (!is_initialized) std::this_thread::sleep_for(std::chrono::seconds(2));
+        sendPrefixed(video_sock, std::string(video_pc->localDescription().value()));
+        std::string video_sdp_answer = readPrefixed(video_sock);
+        if (!video_sdp_answer.empty()) {
+            video_pc->setRemoteDescription(rtc::Description(video_sdp_answer, "answer"));
+            connection.video_peer_connection = video_pc;
+            is_initialized = true;
+            std::cout << "[Video Signaling] Handshake complete." << std::endl;
+        }
+        close(video_sock);
+    }
+}
+
+void ServerPhoneCommunication::decoderWorker() {
+    while (is_running) {
+        EncodedFrame frame;
+        {
+            std::unique_lock<std::mutex> lk(queue_mutex);
+            queue_cv.wait(lk, [this] { return !is_running || !decode_queue.empty(); });
+            if (!is_running) break;
+            frame = std::move(decode_queue.front());
+            decode_queue.pop();
+        }
+
+        auto opt = decoder.decode(reinterpret_cast<const uint8_t*>(frame.data.data()), frame.data.size(), frame.timestamp_us);
+        if (opt.has_value()) {
+            cv::Mat bgr = opt.value();
+            cv::Mat upsampled;
+            cv::resize(bgr, upsampled, cv::Size(1280, 720), 0, 0, cv::INTER_LINEAR);
+            in_out.in_bgr_buffer.store(std::make_shared<cv::Mat>(std::move(upsampled)), std::memory_order_release);
+        }
+
+        auto now_steady = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsed = now_steady - fps_counter.window_start;
+        if (elapsed.count() >= 1.0) {
+            fps_counter.incoming_fps = fps_counter.frame_accumulator / elapsed.count();
+            fps_counter.frame_accumulator = 0;
+            fps_counter.window_start = now_steady;
+        }
     }
 }
 
@@ -253,15 +238,15 @@ void ServerPhoneCommunication::toggleRecordData() {
 
 void ServerPhoneCommunication::sendManualControl(float heading, float angle) {
     if (connection.out_manual_control_channel && connection.out_manual_control_channel->isOpen()) {
-        if (connection.out_manual_control_channel->bufferedAmount() == 0) {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "%.2f,%.2f", heading, angle);
-            connection.out_manual_control_channel->send(buf);
-        }
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%.2f,%.2f", heading, angle);
+        connection.out_manual_control_channel->send(buf);
     }
 }
 
 void ServerPhoneCommunication::stopCommunication() {
     is_running.store(false, std::memory_order_release);
-    if (connection.peer_connection) connection.peer_connection->close();
+    queue_cv.notify_all();
+    if (connection.control_peer_connection) connection.control_peer_connection->close();
+    if (connection.video_peer_connection) connection.video_peer_connection->close();
 }

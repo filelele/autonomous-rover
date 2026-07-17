@@ -50,33 +50,30 @@ bool Camera::init_camera() {
     ACameraMetadata_const_entry entry;
     ACameraMetadata_getConstEntry(cameraCharacteristics, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry);
 
-    //Loop through all supported camera configs 
     bool res_exist = false;
     for (size_t i = 0; i < entry.count; i += 4) {
         int32_t format = entry.data.i32[i];
         int32_t width  = entry.data.i32[i + 1];
         int32_t height = entry.data.i32[i + 2];
         int32_t input  = entry.data.i32[i + 3];
-
-        // Only care about configs of 1920x1080
         if (input == ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT && 
             format == AIMAGE_FORMAT_YUV_420_888 &&
-            width == 1280 &&
-            height == 720) { //YUV_420_888 is the standard for any Google certified device, Gemini said so =))
+            width == 640 &&
+            height == 480) { //YUV_420_888 is the standard for any Google certified device, Gemini said so =))
             
             res_exist = true;
             LOGI("Found supported hardware resolution: %d x %d", width, height);
         }
     }
     if(!res_exist){
-        LOGE("Not support native 1080p YUV_420_888 capture, maybe something else.");
+        LOGE("Not support native 640x480 YUV_420_888 capture, maybe something else.");
         return false;
     }
 
     ACameraMetadata_free(cameraCharacteristics);
 
-    // Allocate memory buffer slots for the incoming frame stream (1280x720 YUV, keeping max 3 frames)
-    media_status_t mediaStatus = AImageReader_new(1280, 720, AIMAGE_FORMAT_YUV_420_888, 3, &m_imageReader);
+    // Allocate memory buffer slots for the incoming frame stream (640x480 YUV, keeping max 3 frames)
+    media_status_t mediaStatus = AImageReader_new(640, 480, AIMAGE_FORMAT_YUV_420_888, 3, &m_imageReader);
     if (mediaStatus != AMEDIA_OK) {
         LOGE("Failed to allocate ImageReader.");
         return false;

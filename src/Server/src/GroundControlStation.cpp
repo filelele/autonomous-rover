@@ -15,11 +15,12 @@ int main() {
 
     const char* phone_ip_char = std::getenv("TAILSCALE_PHONE_IP");
     std::string phone_ip = phone_ip_char;
-    int port = 8888;
+    int control_port = 8888;
+    int video_port = 8889;
 
-    std::cout << "Initializing Communication. Waiting for Phone at " << phone_ip << ":" << port << "..." << std::endl;
-    std::thread comm_thread([&communication, phone_ip, port]() {
-        communication.initialize(phone_ip, port);
+    std::cout << "Initializing Communication. Waiting for Phone at " << phone_ip << ":" << control_port << " and " << video_port << "..." << std::endl;
+    std::thread comm_thread([&communication, phone_ip, control_port, video_port]() {
+        communication.initialize(phone_ip, control_port, video_port);
     });
 
     auto last_control_send = std::chrono::steady_clock::now();
@@ -28,7 +29,7 @@ int main() {
     while (ui.isRunning()) {
         ui.handleEvents(communication);
 
-        // Manual Control (20Hz)
+        // Manual Control (30Hz)
         auto now = std::chrono::steady_clock::now();
         if (now - last_control_send >= std::chrono::milliseconds(33)) {
             last_control_send = now;

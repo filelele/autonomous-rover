@@ -47,15 +47,18 @@ add_library(phone_app SHARED
     ../Shared/src/FrameBuffer.cpp
     src/Camera.cpp
     src/PhoneServerCommunication.cpp
+    src/H265Encoder.cpp
 )
 target_link_options(phone_app PRIVATE "-Wl,-u,ANativeActivity_onCreate")
 
-target_include_directories(phone_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(phone_app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../Shared/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 find_library(log-lib log)
 find_library(android-lib android) #native hardware access
 find_library(camera-lib camera2ndk)
+find_library(mediandk-lib mediandk)
 
 target_link_libraries(phone_app PRIVATE 
     ${android-lib}
@@ -64,4 +67,5 @@ target_link_libraries(phone_app PRIVATE
     native_app_glue 
     datachannel
     ${OpenCV_LIBS}
+    ${mediandk-lib}
 )

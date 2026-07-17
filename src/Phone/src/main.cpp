@@ -34,16 +34,16 @@ void handle_android_cmd(struct android_app* app, int32_t cmd) {
 void android_main(struct android_app* state) {
     LOGI("Phone app started");
 
-    FrameBuffer frame_buffer; // 1 producer, multiple consumer on this buffer.
+    FrameBuffer frame_buffer; 
 
-    Camera camera(&frame_buffer); // producer for camera frame buffer
+    Camera camera(&frame_buffer); 
     camera.init_camera();
     camera.start_stream();
 
     bool manual_mode = false;
     bool record_data = false;
     PhoneServerCommunication phone_server_communication(frame_buffer, manual_mode, record_data);
-    phone_server_communication.initialize(8888);
+    phone_server_communication.initialize(8888, 8889);
     phone_server_communication.startCommunication();
 
     AppContext app_context = {&camera, &phone_server_communication};
