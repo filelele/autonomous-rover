@@ -206,7 +206,7 @@ void ServerPhoneCommunication::decoderWorker() {
         if (opt.has_value()) {
             cv::Mat bgr = opt.value();
             cv::Mat upsampled;
-            cv::resize(bgr, upsampled, cv::Size(1280, 720), 0, 0, cv::INTER_LINEAR);
+            cv::resize(bgr, upsampled, cv::Size(1280, 720), 0, 0, cv::INTER_LANCZOS4);
             in_out.in_bgr_buffer.store(std::make_shared<cv::Mat>(std::move(upsampled)), std::memory_order_release);
         }
 
