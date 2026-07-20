@@ -9,6 +9,7 @@ bin/
 obj/
 
 # Android specific
+# Re-open the project using Android Studio so Gradle Sync happens
 local.properties
 captures/
 .navigation/
