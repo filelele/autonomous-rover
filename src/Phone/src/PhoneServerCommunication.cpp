@@ -332,7 +332,7 @@ void PhoneServerCommunication::videoStream(){
         // Initialize encoder once
         if (!encoder) {
             encoder = std::make_unique<H265Encoder>();
-            if (!encoder->initialize(frame->width, frame->height, 450000, 25, 75)) {
+            if (!encoder->initialize(frame->width, frame->height, 450000, 25, 50)) {
                 LOGE("Encoder init failed.");
                 encoder.reset();
             } else {

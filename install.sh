@@ -13,7 +13,6 @@ export ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/30.0.14904198
 cd ./src/Phone
 bash ./create_apk.sh
 
-
 # Build for Server side
 # install opencv for Server
 sudo apt update
@@ -24,10 +23,6 @@ sudo apt install openssl
 
 # create Server ground control station executable
 cd ../Server
-bash ./create_executable.sh
-
-# create Pi listener
-cd ../RasPi 
 bash ./create_executable.sh
 
 
