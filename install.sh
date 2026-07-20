@@ -1,10 +1,10 @@
 #just install android studio to get the ndk (libs and compilers)
 export ANDROID_HOME=${HOME}/Android/Sdk
 export ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/30.0.14904198 
+# Re-open the project once using Android Studio so Gradle Sync happens
 
-# Do the 2 lines below for webrtc to know IP and establish connection when build, 
+# Do the 2 lines below for Webrtc to know IP and establish connection when build, 
 # IPs is hardcoded
-
 # export TAILSCALE_PHONE_IP = "100.x.x.x"
 # export PI_IP = "100.x.x.x" # raspi local IP in the Phone hotspot network
 
@@ -26,7 +26,9 @@ sudo apt install openssl
 cd ../Server
 bash ./create_executable.sh
 
-
+# create Pi listener
+cd ../RasPi 
+bash ./create_executable.sh
 
 
 

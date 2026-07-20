@@ -2,6 +2,12 @@
 export ANDROID_HOME=${HOME}/Android/Sdk
 export ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/30.0.14904198 
 
+# Download opencv android sdk
+curl -L -O https://github.com/opencv/opencv/releases/download/4.12.0/opencv-4.12.0-android-sdk.zip
+unzip opencv-4.12.0-android-sdk.zip
+mkdir -p opencv-android
+mv OpenCV-android-sdk/* opencv-android/
+rm -rf opencv-4.12.0-android-sdk.zip OpenCV-android-sdk
 
 # Install openssl and build for android
 # OpenSSL needs ANDROID_NDK_ROOT and toolchain in PATH for Android builds

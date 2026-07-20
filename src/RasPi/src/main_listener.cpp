@@ -70,7 +70,7 @@ public:
     UDPServer(int port) {
         sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         
-        // Cấu hình socket Non-blocking (Không làm đứng vòng lặp)
+        // Non-loop-blocking socket
         int flags = fcntl(sockfd, F_GETFL, 0);
         fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 
@@ -140,7 +140,7 @@ int main(){
 		motors_controller.setLeftSpeed(motors_speed.left_forward, motors_speed.left_reverse);
 		motors_controller.setRightSpeed(motors_speed.right_forward, motors_speed.right_reverse);
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(30)); //30ms
+		std::this_thread::sleep_for(std::chrono::milliseconds(33)); //30ms
 	}
 	motors_controller.closeMotors();	
 	return 0;
