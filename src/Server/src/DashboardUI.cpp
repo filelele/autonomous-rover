@@ -12,7 +12,7 @@ DashboardUI::DashboardUI(const std::string& title, int width, int height)
 
     m_window = SDL_CreateWindow(title.c_str(),
                                 SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                m_width, m_height, SDL_WINDOW_SHOWN);
+                                m_width, m_height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (!m_window) {
         std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
         return;
