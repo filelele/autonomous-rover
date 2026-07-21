@@ -50,10 +50,8 @@ ground_control_station
 *~
 
 # Dependencies (downloaded/built locally)
-src/Phone/opencv-android/**
-!src/Phone/opencv-android/.gitkeep
-src/Phone/openssl/**
-!src/Phone/openssl/.gitkeep
+src/Phone/opencv-android
+src/Phone/openssl
 
 # Python
 __pycache__/
