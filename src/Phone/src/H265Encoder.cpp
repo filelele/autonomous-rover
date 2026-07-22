@@ -10,6 +10,8 @@
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
 
+#define AMEDIACODEC_BUFFER_FLAG_KEY_FRAME 1
+
 constexpr int32_t BITRATE_MODE_CQ  = 0; // Constant Quality
 constexpr int32_t BITRATE_MODE_VBR = 1; // Variable Bitrate
 constexpr int32_t BITRATE_MODE_CBR = 2; // Constant Bitrate

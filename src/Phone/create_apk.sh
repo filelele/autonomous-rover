@@ -1,8 +1,39 @@
 #!/bin/bash
-export ANDROID_HOME=${HOME}/Android/Sdk
-export ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/30.0.14904198 
 
-# Download opencv android sdk
+# ANDROID NATIVE SETUP
+sudo apt update && sudo apt install -y openjdk-17-jdk
+
+if [ ! -d "$HOME/Android/Sdk/ndk" ]; then
+    mkdir -p $HOME/Android/Sdk/ndk
+    cd $HOME/Android/Sdk/ndk
+    wget https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
+    unzip android-ndk-r26b-linux.zip
+    rm android-ndk-r26b-linux.zip
+    mv android-ndk-r26b r26b
+fi
+
+if [ ! -d "$HOME/Android/Sdk/cmdline-tools" ]; then
+    mkdir -p $HOME/Android/Sdk/cmdline-tools
+    cd $HOME/Android/Sdk/cmdline-tools
+    wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+    unzip commandlinetools-linux-11076708_latest.zip
+    rm commandlinetools-linux-11076708_latest.zip
+    mv cmdline-tools latest
+fi
+
+export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+export ANDROID_NDK_HOME="$HOME/Android/Sdk/ndk/r26b"
+if [ ! -d "$HOME/Android/Sdk/platforms" ]; then
+    yes | $HOME/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --licenses 
+    $HOME/Android/Sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-31" "build-tools;31.0.0" "platform-tools"
+fi
+
+export PATH="$PATH:$HOME/Android/Sdk/cmdline-tools/latest/bin:$HOME/Android/Sdk/platform-tools"
+
+
+# Download opencv android
 if [ ! -d "opencv-android" ]; then
     curl -L -O https://github.com/opencv/opencv/releases/download/4.12.0/opencv-4.12.0-android-sdk.zip
     unzip opencv-4.12.0-android-sdk.zip

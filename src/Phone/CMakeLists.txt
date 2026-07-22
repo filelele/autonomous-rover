@@ -3,8 +3,6 @@ project(PhoneApp)
 
 set(CMAKE_CXX_STANDARD 20)
 
-# Get PI_IP from PC environment, or use a default if not set
-# set(PI_IP_VAL "100.x.x.x")
 if(DEFINED ENV{PI_IP})
     set(PI_IP $ENV{PI_IP})
 endif()
