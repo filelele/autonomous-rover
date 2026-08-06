@@ -5,11 +5,7 @@ import json
 from pathlib import Path
 
 script_dir = Path(__file__).resolve().parent
-json_path = script_dir / "../Shared/include/tailscale_ip.json"
-with open(json_path) as f:
-    tailscale_ip = json.load(f)
-
-UDP_IP = tailscale_ip['pi_ip']
+UDP_IP ="192.168.31.202"
 UDP_PORT = 12345
 print(f"Loaded Pi IP: {UDP_IP}")
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
