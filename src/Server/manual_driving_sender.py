@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 script_dir = Path(__file__).resolve().parent
-UDP_IP ="192.168.31.202"
+UDP_IP ="192.168.20.216"
 UDP_PORT = 12345
 print(f"Loaded Pi IP: {UDP_IP}")
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
