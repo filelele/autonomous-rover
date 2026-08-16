@@ -13,6 +13,13 @@
 #include <queue>
 #include <condition_variable>
 #include "H265Decoder.hpp"
+#include "Location2D.hpp"
+#include "Telemetry.hpp"
+
+struct DecodedFrame {
+    cv::Mat bgr;
+    uint64_t timestamp_us;
+};
 
 class ServerPhoneCommunication{
 private:
@@ -20,15 +27,8 @@ private:
     std::atomic<bool> is_running{true};
 
     struct InOutData{
-        std::atomic<std::shared_ptr<cv::Mat>> in_bgr_buffer;
-        struct Location{
-            float x;
-            float y;
-        };
-        Location in_location;
-        //in_waypoints
-        std::atomic<bool> in_manual_mode_state{false};
-        std::atomic<bool> in_record_data_state{false};
+        std::atomic<std::shared_ptr<const DecodedFrame>> in_decoded_frame{nullptr};
+        Telemetry in_telemetry = {false, false, {0.0f, 0.0f, 0.0f}};
     };
     InOutData in_out;
 
@@ -38,9 +38,10 @@ private:
         std::shared_ptr<rtc::PeerConnection> control_peer_connection;
         std::shared_ptr<rtc::PeerConnection> video_peer_connection;
         std::shared_ptr<rtc::Track> in_video_track;
-        std::shared_ptr<rtc::DataChannel> in_state_channel;
-        std::shared_ptr<rtc::DataChannel> in_out_mode_channel;
+        std::shared_ptr<rtc::DataChannel> in_telemetry_channel;
+        std::shared_ptr<rtc::DataChannel> out_mode_channel;
         std::shared_ptr<rtc::DataChannel> out_manual_control_channel;
+        std::shared_ptr<rtc::DataChannel> out_location_channel;
     };
     Connection connection;
 
@@ -72,14 +73,16 @@ public:
     //Phone Tailscale ip and which port Phone listening to
     void initialize(const std::string& publisher_ip, int controlSignalPort, int videoSignalPort);
     
-    std::shared_ptr<const cv::Mat> getLatestBgr();
-    InOutData::Location getLatestLocation() const { return in_out.in_location; };
+    std::shared_ptr<const DecodedFrame> getLatestFrame();
     void toggleManualMode();
     void toggleRecordData();
     void sendManualControl(float heading, float angle);
-    bool getManualModeState() const { return in_out.in_manual_mode_state; }
-    bool getRecordDataState() const { return in_out.in_record_data_state; }
+    bool getManualModeState() const { return in_out.in_telemetry.manual_mode_state; }
+    bool getRecordDataState() const { return in_out.in_telemetry.record_data_state; }
     double getIncomingFps() const { return fps_counter.incoming_fps; }
+    Location getLocation() const { return in_out.in_telemetry.location; }
+
+    void sendLocation(const Location& loc/*, uint64_t timestamp_us*/); // For benchmarking only
 
     void stopCommunication();
 };

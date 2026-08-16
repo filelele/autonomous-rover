@@ -52,10 +52,21 @@ void DashboardUI::handleEvents(ServerPhoneCommunication& comm) {
 }
 
 void DashboardUI::update(ServerPhoneCommunication& comm) {
-    auto frame = comm.getLatestBgr();
-    if (!m_running || !frame || frame->empty()) return;
+    auto frame = comm.getLatestFrame();
+    if (!m_running || !frame || frame->bgr.empty()) return;
 
-    cv::Mat displayFrame = frame->clone();
+    int targetWidth = m_width;
+    int targetHeight = m_height;
+    if (m_window) {
+        SDL_GetWindowSize(m_window, &targetWidth, &targetHeight);
+    }
+
+    cv::Mat displayFrame;
+    if (frame->bgr.cols != targetWidth || frame->bgr.rows != targetHeight) {
+        cv::resize(frame->bgr, displayFrame, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_CUBIC);
+    } else {
+        displayFrame = frame->bgr.clone();
+    }
     double fps = comm.getIncomingFps();
     std::string fpsText = "StreamFPS: ";
     if (fps > 0.0) {
@@ -71,16 +82,21 @@ void DashboardUI::update(ServerPhoneCommunication& comm) {
     manual_modeText += manual_mode ? "On" : "Off";
     record_dataText += record_data ? "On" : "Off";
 
-    std::string finalText = fpsText + " | " + manual_modeText + " | " + record_dataText;
+    float x = comm.getLocation().x;
+    float y = comm.getLocation().y;
+    float heading = comm.getLocation().heading;
+    std::string locationText = "Location: (" + std::to_string(x) + ", " + std::to_string(y) + "), Heading: " + std::to_string(heading);
+
+    std::string finalText = fpsText + " | " + manual_modeText + " | " + record_dataText + " | " + locationText;
     cv::putText(displayFrame, finalText, cv::Point(30, 50),
-                cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 255, 0), 2);
+                cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
 
     // Create or recreate texture if size changed
     if (!m_texture || displayFrame.cols != m_width || displayFrame.rows != m_height) {
         if (m_texture) SDL_DestroyTexture(m_texture);
 
-        m_width = frame->cols;
-        m_height = frame->rows;
+        m_width = displayFrame.cols;
+        m_height = displayFrame.rows;
 
         m_texture = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_BGR24,
                                       SDL_TEXTUREACCESS_STREAMING, m_width, m_height);

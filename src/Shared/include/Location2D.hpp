@@ -2,7 +2,7 @@
 #define LOCATION_2D
 
 struct Location{
-    float x;
+    float x ;
     float y;
     float heading;
 };

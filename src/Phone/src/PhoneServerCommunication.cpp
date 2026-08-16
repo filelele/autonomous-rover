@@ -17,9 +17,16 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
+
+static inline int64_t get_boottime_us() {
+    struct timespec ts;
+    clock_gettime(CLOCK_BOOTTIME, &ts);
+    return static_cast<int64_t>(ts.tv_sec) * 1000000LL + ts.tv_nsec / 1000LL;
+}
+
 PhoneServerCommunication::PhoneServerCommunication(
     const FrameBuffer& frame_buffer, bool& manual_mode, bool& record_data) : 
-    frame_buffer(frame_buffer), manual_mode(manual_mode), record_data(record_data)
+    in_out{frame_buffer, {1.0f, 1.0f, 1.0f}, manual_mode, record_data, {false, false, {0.0f, 0.0f, 0.0f}}}
 {
     connection.control_udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
     connection.control_udp_addr.sin_family = AF_INET;
@@ -133,29 +140,19 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
                 std::string label = channel->label();
                 LOGI("DataChannel received: %s", label.c_str());
 
-                if (label == "state_channel") {
-
+                if (label == "telemetry_channel") {
                     channel->onOpen([this, channel](){
-                        this->connection.out_state_channel = channel;
-                        LOGI("State channel opened");
+                        this->connection.out_telemetry_channel = channel;
+                        LOGI("Telemetry channel opened");
                     });
 
                 } else if (label == "mode_channel") {
-
-                    auto sendState = [this, channel]() {
-                        std::string state = "";
-                        state += (manual_mode ? "m1" : "m0");
-                        state += (record_data ? "r1" : "r0");
-                        channel->send(state);
-                    };
-
-                    channel->onOpen([this, channel, sendState](){
+                    channel->onOpen([this, channel](){
                         LOGI("Mode channel opened");
-                        this->connection.in_out_mode_channel = channel;
-                        sendState();
+                        this->connection.in_mode_channel = channel;
                     });
 
-                    channel->onMessage([this, sendState](const rtc::message_variant& message) {
+                    channel->onMessage([this](const rtc::message_variant& message) {
                         std::string msg_string;
                         if (std::holds_alternative<std::string>(message)) {
                             msg_string = std::get<std::string>(message);
@@ -165,10 +162,9 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
                         }
 
                         if (msg_string.length() == 1) {
-                            if (msg_string[0] == 'm') manual_mode = !manual_mode;
-                            else if (msg_string[0] == 'r') record_data = !record_data;
+                            if (msg_string[0] == 'm') in_out.in_manual_mode = !in_out.in_manual_mode;
+                            else if (msg_string[0] == 'r') in_out.in_record_data = !in_out.in_record_data;
                             else return;
-                            sendState();
                         }
                     });
 
@@ -180,7 +176,7 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
                     });
 
                     channel->onMessage([this](const rtc::message_variant& message) {
-                        if (!manual_mode) return;
+                        if (!in_out.in_manual_mode) return;
                         if (std::holds_alternative<std::string>(message)) {
                             std::string msg = std::get<std::string>(message);
                             sendto(connection.control_udp_socket, msg.c_str(), msg.size(), 0,
@@ -192,6 +188,46 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
                         }
                     });
 
+                } else if (label == "location_channel") {
+                    channel->onOpen([this, channel](){
+                        this->connection.in_location_channel = channel;
+                        LOGI("Location channel opened");
+                    });
+
+                    channel->onMessage([this](const rtc::message_variant& message) {
+                        std::string msg;
+                        if(std::holds_alternative<std::string>(message)){
+                            msg = std::get<std::string>(message);
+                        }else{
+                            const rtc::binary& packet = std::get<rtc::binary>(message);
+                            msg.assign(reinterpret_cast<const char*>(packet.data()), packet.size());
+                        }
+
+                        size_t first_comma = msg.find(',');
+                        size_t second_comma = msg.find(',', first_comma + 1);
+                        size_t third_comma = msg.find(',', second_comma + 1);
+                        if (first_comma == std::string::npos || second_comma == std::string::npos || third_comma == std::string::npos) {
+                            return;
+                        }
+
+                        in_out.in_slow_location.x = std::stof(msg.substr(0, first_comma));
+                        in_out.in_slow_location.y = std::stof(msg.substr(first_comma + 1, second_comma - first_comma - 1));
+                        in_out.in_slow_location.heading = std::stof(msg.substr(second_comma + 1, third_comma - second_comma - 1));
+                        
+                        /* For benchmarking only
+                        uint64_t frame_relative_timestamp_us = static_cast<uint64_t>(std::stoull(msg.substr(third_comma + 1)));
+                        uint64_t frame_timestamp_us = base_pts_us + frame_relative_timestamp_us;
+                        const auto receive_timestamp_us = get_boottime_us();
+                        const int64_t latency_us = static_cast<int64_t>(receive_timestamp_us - frame_timestamp_us);
+                        const double latency_ms = static_cast<double>(latency_us) / 1000.0;
+
+                        std::string response = std::to_string(latency_ms);
+                        if (connection.in_location_channel && connection.in_location_channel->isOpen()) {
+                            connection.in_location_channel->send(response);
+                        }
+                        */
+                        
+                    });
                 }
             });
 
@@ -326,7 +362,7 @@ void PhoneServerCommunication::videoStream(){
             continue;
         }
 
-        FramePtr frame = frame_buffer.get_latest_frame();
+        FramePtr frame = in_out.out_frame_buffer.get_latest_frame();
         if(!frame) continue;
 
         // Initialize encoder once
@@ -341,7 +377,7 @@ void PhoneServerCommunication::videoStream(){
                     auto vt = this->connection.out_video_track;
                     if (!vt || !vt->isOpen()) return;
 
-                    uint32_t timestamp = static_cast<uint32_t>(pts_us * 90 / 1000);
+                    uint32_t timestamp = static_cast<uint32_t>((pts_us - base_pts_us) * 90 / 1000); // avoid overflow by minusing a base timestamp
                     rtc::FrameInfo info(timestamp);
                     vt->sendFrame(reinterpret_cast<const rtc::byte*>(data), size, info);
                 });
@@ -356,18 +392,33 @@ void PhoneServerCommunication::videoStream(){
     LOGI("Video stream thread exiting.");
 }
 
-void PhoneServerCommunication::stateStream(){
+void PhoneServerCommunication::telemetryStream(){
     while(is_running){
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+        in_out.out_telemetry.manual_mode_state = in_out.in_manual_mode;
+        in_out.out_telemetry.record_data_state = in_out.in_record_data;
+        in_out.out_telemetry.location = in_out.in_slow_location;
+        if(connection.out_telemetry_channel && connection.out_telemetry_channel->isOpen()){
+            std::string telemetry_msg = std::to_string(
+                in_out.out_telemetry.location.x) + "," 
+                + std::to_string(in_out.out_telemetry.location.y) + "," 
+                + std::to_string(in_out.out_telemetry.location.heading) + "," 
+                + (in_out.out_telemetry.manual_mode_state ? "m1" : "m0") + "," 
+                + (in_out.out_telemetry.record_data_state ? "r1" : "r0");
+            connection.out_telemetry_channel->send(telemetry_msg);
+        }
     }
 }
 
 void PhoneServerCommunication::startCommunication(){
+    base_pts_us = get_boottime_us();
     video_stream_thread = std::thread(&PhoneServerCommunication::videoStream, this);
+    telemetry_stream_thread = std::thread(&PhoneServerCommunication::telemetryStream, this);
 }
 
 void PhoneServerCommunication::stopCommunication(){
-    if (video_stream_thread.joinable()) video_stream_thread.join(); 
+    if (video_stream_thread.joinable()) video_stream_thread.join();
+    if (telemetry_stream_thread.joinable()) telemetry_stream_thread.join();
     is_running.store(false, std::memory_order_release);
     if (encoder) {
         encoder->stop();

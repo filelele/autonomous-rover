@@ -15,9 +15,8 @@ sudo apt install -y libsdl2-dev
 
 mkdir -p ./build
 cd ./build
-sudo rm -rf ./*
+#sudo rm -rf ./*
 cmake ..
-cmake --build
 cmake --build . -j$(nproc)
 
 # the executable is ground_control_station

@@ -21,9 +21,12 @@ set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
 include(FetchContent)
 FetchContent_Declare(
     datachannel
-    GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
+    GIT_REPOSITORY git@github.com:paullouisageneau/libdatachannel.git
     GIT_TAG        v0.23.3
+    GIT_PROGRESS        TRUE        
+    GIT_SUBMODULES_RECURSE TRUE
 )
+
 set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl/android-arm64")
 set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include")
 set(OPENSSL_SSL_LIBRARY "${OPENSSL_ROOT_DIR}/lib/libssl.a")

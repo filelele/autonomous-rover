@@ -1,5 +1,6 @@
 #include "ServerPhoneCommunication.hpp"
 #include "DashboardUI.hpp"
+#include "LingbotMapLocalizer.hpp"
 #include <iostream>
 #include <thread>
 #include <string>
@@ -11,7 +12,6 @@ int main() {
     std::cout << "Starting Ground Control Station..." << std::endl;
 
     ServerPhoneCommunication communication;
-    DashboardUI ui("Autonomous Rover Dashboard", 1280, 720);
 
     const char* phone_ip_char = std::getenv("TAILSCALE_PHONE_IP");
     std::string phone_ip = phone_ip_char;
@@ -23,6 +23,9 @@ int main() {
         communication.initialize(phone_ip, control_port, video_port);
     });
 
+    LingbotMapLocalizer localizer(communication);
+    DashboardUI ui("Autonomous Rover Dashboard", 1280, 720);
+    
     auto last_control_send = std::chrono::steady_clock::now();
 
     // Main UI Loop
@@ -48,8 +51,8 @@ int main() {
             }
         }
 
-        auto frame = communication.getLatestBgr();
-        if (frame) {
+        auto frame = communication.getLatestFrame();
+        if (frame && !frame->bgr.empty()) {
             ui.update(communication);
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
