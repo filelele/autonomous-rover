@@ -19,18 +19,8 @@ set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
 
 set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
 set(NO_TESTS ON CACHE BOOL "" FORCE)
-set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps" CACHE PATH "" FORCE)
-set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "" FORCE)
-set(FETCHCONTENT_QUIET FALSE)
-include(FetchContent)
-FetchContent_Declare(
-        datachannel
-        GIT_REPOSITORY git@github.com:paullouisageneau/libdatachannel.git
-        GIT_TAG        v0.23.3
-        GIT_PROGRESS        TRUE        
-        GIT_SUBMODULES_RECURSE TRUE
-)
-FetchContent_MakeAvailable(datachannel)
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../Shared/libdatachannel libdatachannel)
 
 add_library(h265decoder STATIC
         src/H265Decoder.cpp
@@ -96,8 +86,8 @@ target_link_libraries(lingbot_map_localizer PUBLIC
 )
 
 # Final executable
-add_executable(ground_control_station src/GroundControlStation.cpp)
-target_link_libraries(ground_control_station PRIVATE
+add_executable(main src/main.cpp)
+target_link_libraries(main PRIVATE
         dashboard_ui
         lingbot_map_localizer
         server_phone_communication

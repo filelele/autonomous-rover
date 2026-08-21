@@ -18,20 +18,12 @@ set(USE_GNUTLS OFF CACHE BOOL "" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
 
-include(FetchContent)
-FetchContent_Declare(
-    datachannel
-    GIT_REPOSITORY git@github.com:paullouisageneau/libdatachannel.git
-    GIT_TAG        v0.23.3
-    GIT_PROGRESS        TRUE        
-    GIT_SUBMODULES_RECURSE TRUE
-)
-
 set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl/android-arm64")
 set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include")
 set(OPENSSL_SSL_LIBRARY "${OPENSSL_ROOT_DIR}/lib/libssl.a")
 set(OPENSSL_CRYPTO_LIBRARY "${OPENSSL_ROOT_DIR}/lib/libcrypto.a")
-FetchContent_MakeAvailable(datachannel)
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../Shared/libdatachannel libdatachannel)
 
 # for native app glue lib
 add_library(native_app_glue STATIC ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)

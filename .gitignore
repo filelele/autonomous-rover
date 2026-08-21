@@ -49,9 +49,10 @@ ground_control_station
 *.swp
 *~
 
-# Dependencies (downloaded/built locally)
+# Dependencies
 src/Phone/opencv-android
 src/Phone/openssl
+src/Shared/libdatachannel
 
 # Python
 __pycache__/
