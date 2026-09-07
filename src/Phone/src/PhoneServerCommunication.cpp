@@ -205,15 +205,11 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
 
                         size_t first_comma = msg.find(',');
                         size_t second_comma = msg.find(',', first_comma + 1);
-                        size_t third_comma = msg.find(',', second_comma + 1);
-                        if (first_comma == std::string::npos || second_comma == std::string::npos || third_comma == std::string::npos) {
-                            return;
-                        }
 
                         in_out.in_slow_location.x = std::stof(msg.substr(0, first_comma));
                         in_out.in_slow_location.y = std::stof(msg.substr(first_comma + 1, second_comma - first_comma - 1));
-                        in_out.in_slow_location.heading = std::stof(msg.substr(second_comma + 1, third_comma - second_comma - 1));
-                        
+                        in_out.in_slow_location.heading = std::stof(msg.substr(second_comma + 1));
+
                         /* For benchmarking only
                         uint64_t frame_relative_timestamp_us = static_cast<uint64_t>(std::stoull(msg.substr(third_comma + 1)));
                         uint64_t frame_timestamp_us = base_pts_us + frame_relative_timestamp_us;
@@ -394,7 +390,7 @@ void PhoneServerCommunication::videoStream(){
 
 void PhoneServerCommunication::telemetryStream(){
     while(is_running){
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
         in_out.out_telemetry.manual_mode_state = in_out.in_manual_mode;
         in_out.out_telemetry.record_data_state = in_out.in_record_data;
         in_out.out_telemetry.location = in_out.in_slow_location;

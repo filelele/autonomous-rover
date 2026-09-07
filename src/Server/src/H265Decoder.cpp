@@ -35,6 +35,9 @@ bool H265Decoder::initialize(){
     // Low latency settings
     impl->ctx->flags |= AV_CODEC_FLAG_LOW_DELAY;
     impl->ctx->flags2 |= AV_CODEC_FLAG2_SHOW_ALL;
+    // Tolerate truncated/corrupt NAL units (packet loss) instead of erroring out
+    impl->ctx->err_recognition = 0; // default; rely on flags below
+    impl->ctx->flags |= AV_CODEC_FLAG_OUTPUT_CORRUPT;
 
     if (avcodec_open2(impl->ctx, impl->codec, nullptr) < 0) {
         std::cerr << "Failed to open H265 decoder" << std::endl;
@@ -56,6 +59,12 @@ std::optional<cv::Mat> H265Decoder::decode(const uint8_t* data, size_t size, int
 
     int ret = avcodec_send_packet(impl->ctx, impl->pkt);
     if (ret < 0) {
+        // EINVAL usually means missing VPS/SPS/PPS (joined mid-GOP) or corrupt data.
+        // Flush and keep going; the next IDR frame will resync the stream.
+        if (ret == AVERROR(EINVAL)) {
+            avcodec_flush_buffers(impl->ctx);
+            return std::nullopt;
+        }
         std::cerr << "avcodec_send_packet error " << ret << std::endl;
         return std::nullopt;
     }

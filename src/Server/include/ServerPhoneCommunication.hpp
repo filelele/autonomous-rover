@@ -82,7 +82,7 @@ public:
     double getIncomingFps() const { return fps_counter.incoming_fps; }
     Location getLocation() const { return in_out.in_telemetry.location; }
 
-    void sendLocation(const Location& loc/*, uint64_t timestamp_us*/); // For benchmarking only
+    void sendLocation(Location loc/*, uint64_t timestamp_us*/); // For benchmarking only
 
     void stopCommunication();
 };

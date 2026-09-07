@@ -18,7 +18,7 @@ DashboardUI::DashboardUI(const std::string& title, int width, int height)
         return;
     }
 
-    m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED /*| SDL_RENDERER_PRESENTVSYNC*/);
     if (!m_renderer) {
         std::cerr << "Renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
         return;
@@ -63,7 +63,7 @@ void DashboardUI::update(ServerPhoneCommunication& comm) {
 
     cv::Mat displayFrame;
     if (frame->bgr.cols != targetWidth || frame->bgr.rows != targetHeight) {
-        cv::resize(frame->bgr, displayFrame, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_CUBIC);
+        cv::resize(frame->bgr, displayFrame, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_LINEAR);
     } else {
         displayFrame = frame->bgr.clone();
     }

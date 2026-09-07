@@ -53,6 +53,7 @@ ground_control_station
 src/Phone/opencv-android
 src/Phone/openssl
 src/Shared/libdatachannel
+src/Server/lingbot-map
 
 # Python
 __pycache__/

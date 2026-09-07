@@ -150,6 +150,12 @@ void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int c
         location_channel_config.reliability.unordered = true;
         location_channel_config.reliability.maxPacketLifeTime = std::chrono::milliseconds(200);
         connection.out_location_channel = control_pc->createDataChannel("location_channel", location_channel_config);
+        connection.out_location_channel->onOpen([]() {
+            std::cout << "[ServerPhoneCommunication] Location channel OPEN" << std::endl;
+        });
+        connection.out_location_channel->onClosed([]() {
+            std::cout << "[ServerPhoneCommunication] Location channel CLOSED" << std::endl;
+        });
         
         /* //For benchmarking only
         connection.out_location_channel->onMessage([](const rtc::message_variant& message) {
@@ -342,14 +348,14 @@ void ServerPhoneCommunication::sendManualControl(float heading, float angle) {
     }
 }
 
-void ServerPhoneCommunication::sendLocation(const Location& loc/*, uint64_t timestamp_us*/) {
+void ServerPhoneCommunication::sendLocation(Location loc/*, uint64_t timestamp_us*/) {
     if (connection.out_location_channel && connection.out_location_channel->isOpen()) {
         char buf[64];
         /* For benchmarking only
         snprintf(buf, sizeof(buf), "%.2f,%.2f,%.2f,%llu", loc.x, loc.y, loc.heading,
             static_cast<unsigned long long>(timestamp_us));
         */
-        snprintf(buf, sizeof(buf), "%.2f,%.2f,%.2f", loc.x, loc.y, loc.heading);
+        snprintf(buf, sizeof(buf), "%.9f,%.9f,%.9f", loc.x, loc.y, loc.heading);
         connection.out_location_channel->send(buf);
     }
 }
