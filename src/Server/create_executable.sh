@@ -14,7 +14,7 @@ sudo apt install -y libssl-dev
 sudo apt install -y libsdl2-dev
 
 # download and install lingbot-map
-git clone https://github.com/Robbyant/lingbot-map.git
+git clone https://github.com/filelele/lingbot-map.git
 cd lingbot-map
 ENV_NAME="lingbot-map"
 

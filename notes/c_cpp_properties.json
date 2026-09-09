@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/src/Shared/include",
                 "${workspaceFolder}/src/Server/include",
-                "${workspaceFolder}/src/Server/build/_deps/datachannel-src/include",
+                "${workspaceFolder}/src/Shared/libdatachannel/include",
                 "/usr/include/opencv4"
             ],
             "defines": [],
@@ -19,7 +19,7 @@
             "includePath": [
                 "${workspaceFolder}/src/Phone/include",
                 "${workspaceFolder}/src/Shared/include",
-                "${workspaceFolder}/src/Phone/build/_deps/datachannel-src/include",
+                "${workspaceFolder}/src/Shared/libdatachannel/include",
                 "${workspaceFolder}/src/Phone/opencv-android/sdk/native/jni/include",
                 "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
                 "${ANDROID_NDK_HOME}/sources/android/native_app_glue"
