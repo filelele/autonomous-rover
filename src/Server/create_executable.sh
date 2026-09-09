@@ -20,6 +20,7 @@ ENV_NAME="lingbot-map"
 
 if conda env list | awk '{print $1}' | grep -Fxq "$ENV_NAME"; then
     echo "Environment '$ENV_NAME' already exists. Skipping..."
+    conda activate lingbot-map
 else
     conda create -n lingbot-map python=3.10 -y
     conda activate lingbot-map
@@ -27,16 +28,17 @@ else
     pip install -e .
     pip install --index-url https://pypi.org/simple flashinfer-python
     pip install -e ".[vis]"
-    # sky-masking model
-    wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/skyseg_batch.onnx"
-    pip install onnxruntime-gpu
-
-    # main model
-    wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/lingbot-map.pt"
-    mv lingbot-map.pt ./lingbot_map/models/checkpoints/lingbot-map.pt
-    cd ..
 fi
+## sky-masking model
+wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/skyseg_batch.onnx"
+pip install onnxruntime-gpu
 
+## main model
+wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/lingbot-map.pt"
+mv lingbot-map.pt ./lingbot_map/models/checkpoints/lingbot-map.pt
+cd ..
+
+#build the executable
 mkdir -p ./build
 cd ./build
 sudo rm -rf ./*
