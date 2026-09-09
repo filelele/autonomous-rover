@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(GroundControlStation)
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(OpenSSL REQUIRED)
 find_package(SDL2 REQUIRED)

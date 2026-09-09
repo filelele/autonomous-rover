@@ -68,3 +68,4 @@ venv/
 # Others
 **/tailscale_ip.json
 experiment/
+**/ndk
