@@ -1,4 +1,3 @@
-#include <thread>
 #include <native_app_glue/android_native_app_glue.h> //ignore intellisense complaint
 #include <android/log.h>
 #include <android/window.h>
@@ -36,9 +35,9 @@ void android_main(struct android_app* state) {
 
     FrameBuffer frame_buffer; 
 
-    Camera camera(&frame_buffer); 
+    Camera camera(&frame_buffer, 640, 480, 0.4f, 1.0f/120.0f, 6400); 
     camera.init_camera();
-    camera.start_stream();
+    camera.start_stream(30);
 
     bool manual_mode = false;
     bool record_data = false;
