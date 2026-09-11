@@ -1,3 +1,4 @@
+the pseudo sleep for 220ms, but actual lingbot-map run is just 180ms, let say 40ms for huge data transfering and stuff.
 385.914
 407.615
 374.351

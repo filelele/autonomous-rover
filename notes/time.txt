@@ -1,0 +1,8 @@
+android capture frame with timestamp since boottime of device in ns.
+here I log Frame and Location in milliseconds because:
+    - Consecutive Frames has 33ms interval (30FPS), large enough to round up from ns to ms and never get 2 frame at same ms.
+    - Same goes for Location, which has even larger latency between updates.
+Log use epoch time (not boottime) of system in ms.
+H265 Android encoder expect timestamp in us, hence the conversion.
+WebRTC RTP(Real-time transport protocol) requires timestamp in 90kHz -> timestamp_us*90000/1000000 or *90/1000.
+RTP header size is constrained to uint32_t, hence cannot just send absolute epoch timestamp, must use relative boottime timestamp.
