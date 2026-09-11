@@ -2,8 +2,11 @@
 #include <android/log.h>
 #include <android/window.h>
 #include "FrameBuffer.hpp"
+#include "Location2D.hpp"
+#include "Telemetry.hpp"
 #include "Camera.hpp"
 #include "PhoneServerCommunication.hpp"
+#include "Logger.hpp"
 
 #define TAG "Main"
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__))
@@ -11,6 +14,7 @@
 struct AppContext{
     Camera* camera;
     PhoneServerCommunication* phone_server_communication;
+    Logger* logger;
 };
 
 void handle_android_cmd(struct android_app* app, int32_t cmd) {
@@ -33,19 +37,26 @@ void handle_android_cmd(struct android_app* app, int32_t cmd) {
 void android_main(struct android_app* state) {
     LOGI("Phone app started");
 
-    FrameBuffer frame_buffer; 
+    //Shared structures
+    FrameBuffer frame_buffer;
+    Location location;
+    bool manual_mode = false;
+    bool record_data = false;
+    Telemetry telemetry;
 
+    //Nodes
     Camera camera(&frame_buffer, 640, 480, 0.4f, 1.0f/120.0f, 6400); 
     camera.init_camera();
     camera.start_stream(30);
 
-    bool manual_mode = false;
-    bool record_data = false;
-    PhoneServerCommunication phone_server_communication(frame_buffer, manual_mode, record_data);
+    PhoneServerCommunication phone_server_communication(frame_buffer, location, manual_mode, record_data, telemetry);
     phone_server_communication.initialize(8888, 8889);
     phone_server_communication.startCommunication();
 
-    AppContext app_context = {&camera, &phone_server_communication};
+    Logger logger(frame_buffer, record_data, camera.getBaseEpochMs());
+    logger.startLogging();
+
+    AppContext app_context = {&camera, &phone_server_communication, &logger};
     state->onAppCmd = handle_android_cmd;
     state->userData = &app_context;
 
@@ -60,8 +71,8 @@ void android_main(struct android_app* state) {
             }
             if (state->destroyRequested != 0) {
                 LOGI("Exiting C++ loop.");
+                logger.stopLogging();
                 phone_server_communication.stopCommunication();
-                //if (signaling_thread.joinable()) signaling_thread.join();
                 return;
             }
         }

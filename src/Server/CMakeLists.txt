@@ -40,6 +40,7 @@ target_link_libraries(h265decoder PUBLIC
 
 add_library(server_phone_communication STATIC
         src/ServerPhoneCommunication.cpp
+        ../Shared/src/FrameBuffer.cpp
 )
 
 target_include_directories(server_phone_communication PUBLIC

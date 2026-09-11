@@ -2,8 +2,9 @@
 #include "ServerPhoneCommunication.hpp"
 #include <iostream>
 
-DashboardUI::DashboardUI(const std::string& title, int width, int height)
-    : m_width(width), m_height(height) {
+DashboardUI::DashboardUI(const FrameBuffer& frame_buffer, const Telemetry& telemetry,
+                         const std::string& title, int width, int height)
+    : m_frame_buffer(frame_buffer), m_telemetry(telemetry), m_width(width), m_height(height) {
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
@@ -52,8 +53,11 @@ void DashboardUI::handleEvents(ServerPhoneCommunication& comm) {
 }
 
 void DashboardUI::update(ServerPhoneCommunication& comm) {
-    auto frame = comm.getLatestFrame();
-    if (!m_running || !frame || frame->bgr.empty()) return;
+    auto frame = m_frame_buffer.get_latest_frame();
+    if (!m_running || !frame) return;
+
+    cv::Mat bgr = frame->to_bgr();
+    if (bgr.empty()) return;
 
     int targetWidth = m_width;
     int targetHeight = m_height;
@@ -62,10 +66,10 @@ void DashboardUI::update(ServerPhoneCommunication& comm) {
     }
 
     cv::Mat displayFrame;
-    if (frame->bgr.cols != targetWidth || frame->bgr.rows != targetHeight) {
-        cv::resize(frame->bgr, displayFrame, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_LINEAR);
+    if (bgr.cols != targetWidth || bgr.rows != targetHeight) {
+        cv::resize(bgr, displayFrame, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_LINEAR);
     } else {
-        displayFrame = frame->bgr.clone();
+        displayFrame = bgr.clone();
     }
     double fps = comm.getIncomingFps();
     std::string fpsText = "StreamFPS: ";
@@ -75,16 +79,16 @@ void DashboardUI::update(ServerPhoneCommunication& comm) {
         fpsText += "Not available";
     }
 
-    bool manual_mode = comm.getManualModeState();
-    bool record_data = comm.getRecordDataState();
+    bool manual_mode = m_telemetry.manual_mode_state;
+    bool record_data = m_telemetry.record_data_state;
     std::string manual_modeText = "Manual Mode: ";
     std::string record_dataText = "Record Data: ";
     manual_modeText += manual_mode ? "On" : "Off";
     record_dataText += record_data ? "On" : "Off";
 
-    float x = comm.getLocation().x;
-    float y = comm.getLocation().y;
-    float heading = comm.getLocation().heading;
+    float x = m_telemetry.location.x;
+    float y = m_telemetry.location.y;
+    float heading = m_telemetry.location.heading;
     std::string locationText = "Location: (" + std::to_string(x) + ", " + std::to_string(y) + "), Heading: " + std::to_string(heading);
 
     std::string finalText = fpsText + " | " + manual_modeText + " | " + record_dataText + " | " + locationText;

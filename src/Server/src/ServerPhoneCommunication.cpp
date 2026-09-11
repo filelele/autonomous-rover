@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <chrono>
 #include <cstring>
-#include <fstream>
 #include <rtc/h265rtpdepacketizer.hpp>
 
 /* //For benchmarking only
@@ -26,7 +25,8 @@ static void appendLocalizationLatencyLog(double latency_ms) {
     log_file << latency_ms << '\n';
 }
 */
-ServerPhoneCommunication::ServerPhoneCommunication() {
+ServerPhoneCommunication::ServerPhoneCommunication(FrameBuffer& frame_buffer, Telemetry& telemetry)
+    : in_out{frame_buffer, telemetry} {
     is_running = true;
     decoder_thread = std::thread(&ServerPhoneCommunication::decoderWorker, this);
 }
@@ -306,12 +306,10 @@ void ServerPhoneCommunication::decoderWorker() {
             decode_queue.pop();
         }
 
-        auto opt = decoder.decode(reinterpret_cast<const uint8_t*>(frame.data.data()), frame.data.size(), frame.timestamp_us);
-        if (opt.has_value()) {
-            cv::Mat decoded = std::move(opt.value());
-            const uint64_t frame_relative_timestamp_us = static_cast<uint64_t>(frame.timestamp_us * 1000ULL / 90ULL);
-            auto decoded_frame = std::make_shared<DecodedFrame>(DecodedFrame{std::move(decoded), frame_relative_timestamp_us});
-            in_out.in_decoded_frame.store(std::move(decoded_frame), std::memory_order_release);
+        const int64_t timestamp_ms = static_cast<int64_t>(frame.timestamp_us / 90ULL);
+        FramePtr decoded_frame = decoder.decode(reinterpret_cast<const uint8_t*>(frame.data.data()), frame.data.size(), timestamp_ms);
+        if (decoded_frame) {
+            in_out.in_frame_buffer.update_frame(std::move(decoded_frame));
         }
 
         auto now_steady = std::chrono::steady_clock::now();
@@ -322,10 +320,6 @@ void ServerPhoneCommunication::decoderWorker() {
             fps_counter.window_start = now_steady;
         }
     }
-}
-
-std::shared_ptr<const DecodedFrame> ServerPhoneCommunication::getLatestFrame(){
-    return in_out.in_decoded_frame.load(std::memory_order_acquire);
 }
 
 void ServerPhoneCommunication::toggleManualMode() {
@@ -350,12 +344,8 @@ void ServerPhoneCommunication::sendManualControl(float heading, float angle) {
 
 void ServerPhoneCommunication::sendLocation(Location loc/*, uint64_t timestamp_us*/) {
     if (connection.out_location_channel && connection.out_location_channel->isOpen()) {
-        char buf[64];
-        /* For benchmarking only
-        snprintf(buf, sizeof(buf), "%.2f,%.2f,%.2f,%llu", loc.x, loc.y, loc.heading,
-            static_cast<unsigned long long>(timestamp_us));
-        */
-        snprintf(buf, sizeof(buf), "%.9f,%.9f,%.9f", loc.x, loc.y, loc.heading);
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%.9f,%.9f,%.9f,%lld", loc.x, loc.y, loc.heading, static_cast<long long>(loc.timestamp));
         connection.out_location_channel->send(buf);
     }
 }

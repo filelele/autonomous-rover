@@ -9,8 +9,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-LingbotMapLocalizer::LingbotMapLocalizer(ServerPhoneCommunication& communication)
-    : communication(communication) {
+LingbotMapLocalizer::LingbotMapLocalizer(const FrameBuffer& frame_buffer, Location& location, ServerPhoneCommunication& communication)
+    : frame_buffer(frame_buffer), location(location), communication(communication) {
     // 1) LINGBOT_IMAGES_DIR env var (preferred on a headless machine)
     // 2) zenity GTK dialog, only if a display is available (here I use ssh -X to forward the display to my laptop)
     std::cout << "[LingbotMapLocalizer] Starting localization thread..." << std::endl;
@@ -183,23 +183,29 @@ std::array<double, 16> LingbotMapLocalizer::getLatestC2W() {
 }
 
 void LingbotMapLocalizer::localizationLoop() {
-    uint64_t last_localized_timestamp_us = 0;
+    int64_t last_localized_timestamp_ms = -1;
     while (is_running.load(std::memory_order_acquire)) {
-        auto frame = communication.getLatestFrame();
-        if (!frame || frame->bgr.empty()) {
+        auto frame = frame_buffer.get_latest_frame();
+        if (!frame) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
 
-        if (frame->timestamp_us == last_localized_timestamp_us) {
+        cv::Mat bgr = frame->to_bgr();
+        if (bgr.empty()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
-        last_localized_timestamp_us = frame->timestamp_us;
 
-        std::cout << "[LingbotMapLocalizer] Sending frame " << frame->bgr.cols << "x"
-                  << frame->bgr.rows << " to localizer..." << std::endl;
-        if (!sendFrame(frame->bgr)) break;
+        if (frame->timestamp_ms == last_localized_timestamp_ms) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+        last_localized_timestamp_ms = frame->timestamp_ms;
+
+        std::cout << "[LingbotMapLocalizer] Sending frame " << bgr.cols << "x"
+                  << bgr.rows << " to localizer..." << std::endl;
+        if (!sendFrame(bgr)) break;
 
         std::array<double, 16> c2w{};
         if (readResult(c2w)) {
@@ -218,6 +224,8 @@ void LingbotMapLocalizer::localizationLoop() {
             loc.y = static_cast<float>(tz);
             // Camera forward direction (+Z of camera) expressed in world frame = third column of R
             loc.heading = static_cast<float>(std::atan2(c2w[2], c2w[10]));
+            loc.timestamp = frame->timestamp_ms;
+            location = loc;
             communication.sendLocation(loc/*,timeframe for debug latency here*/);
         } else {
             std::cerr << "[LingbotMapLocalizer] Localization failed on frame." << std::endl;

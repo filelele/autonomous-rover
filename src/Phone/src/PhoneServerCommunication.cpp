@@ -18,15 +18,9 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 
-static inline int64_t get_boottime_us() {
-    struct timespec ts;
-    clock_gettime(CLOCK_BOOTTIME, &ts);
-    return static_cast<int64_t>(ts.tv_sec) * 1000000LL + ts.tv_nsec / 1000LL;
-}
-
 PhoneServerCommunication::PhoneServerCommunication(
-    const FrameBuffer& frame_buffer, bool& manual_mode, bool& record_data) : 
-    in_out{frame_buffer, {1.0f, 1.0f, 1.0f}, manual_mode, record_data, {false, false, {0.0f, 0.0f, 0.0f}}}
+    const FrameBuffer& frame_buffer, Location& location, bool& manual_mode, bool& record_data, Telemetry& telemetry) : 
+    in_out{frame_buffer, location, manual_mode, record_data, telemetry}
 {
     connection.control_udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
     connection.control_udp_addr.sin_family = AF_INET;
@@ -205,11 +199,13 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
 
                         size_t first_comma = msg.find(',');
                         size_t second_comma = msg.find(',', first_comma + 1);
+                        size_t third_comma = msg.find(',', second_comma + 1);
 
-                        in_out.in_slow_location.x = std::stof(msg.substr(0, first_comma));
-                        in_out.in_slow_location.y = std::stof(msg.substr(first_comma + 1, second_comma - first_comma - 1));
-                        in_out.in_slow_location.heading = std::stof(msg.substr(second_comma + 1));
-
+                        in_out.in_location.x = std::stof(msg.substr(0, first_comma));
+                        in_out.in_location.y = std::stof(msg.substr(first_comma + 1, second_comma - first_comma - 1));
+                        in_out.in_location.heading = std::stof(msg.substr(second_comma + 1, third_comma - second_comma - 1));
+                        in_out.in_location.timestamp = std::stoull(msg.substr(third_comma + 1));
+                        
                         /* For benchmarking only
                         uint64_t frame_relative_timestamp_us = static_cast<uint64_t>(std::stoull(msg.substr(third_comma + 1)));
                         uint64_t frame_timestamp_us = base_pts_us + frame_relative_timestamp_us;
@@ -373,7 +369,7 @@ void PhoneServerCommunication::videoStream(){
                     auto vt = this->connection.out_video_track;
                     if (!vt || !vt->isOpen()) return;
 
-                    uint32_t timestamp = static_cast<uint32_t>((pts_us - base_pts_us) * 90 / 1000); // avoid overflow by minusing a base timestamp
+                    uint32_t timestamp = static_cast<uint32_t>(pts_us * 90 / 1000); //1us = 0.09 tick
                     rtc::FrameInfo info(timestamp);
                     vt->sendFrame(reinterpret_cast<const rtc::byte*>(data), size, info);
                 });
@@ -393,7 +389,7 @@ void PhoneServerCommunication::telemetryStream(){
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         in_out.out_telemetry.manual_mode_state = in_out.in_manual_mode;
         in_out.out_telemetry.record_data_state = in_out.in_record_data;
-        in_out.out_telemetry.location = in_out.in_slow_location;
+        in_out.out_telemetry.location = in_out.in_location;
         if(connection.out_telemetry_channel && connection.out_telemetry_channel->isOpen()){
             std::string telemetry_msg = std::to_string(
                 in_out.out_telemetry.location.x) + "," 
@@ -407,7 +403,6 @@ void PhoneServerCommunication::telemetryStream(){
 }
 
 void PhoneServerCommunication::startCommunication(){
-    base_pts_us = get_boottime_us();
     video_stream_thread = std::thread(&PhoneServerCommunication::videoStream, this);
     telemetry_stream_thread = std::thread(&PhoneServerCommunication::telemetryStream, this);
 }

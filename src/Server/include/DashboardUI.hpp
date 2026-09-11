@@ -3,12 +3,15 @@
 
 #include <SDL2/SDL.h>
 #include <opencv2/opencv.hpp>
-#include <memory>
 #include <string>
+#include "FrameBuffer.hpp"
+#include "Telemetry.hpp"
 #include "ServerPhoneCommunication.hpp"
+
 class DashboardUI {
 public:
-    DashboardUI(const std::string& title = "Autonomous Rover Dashboard", int width = 1280, int height = 720);
+    DashboardUI(const FrameBuffer& frame_buffer, const Telemetry& telemetry,
+                const std::string& title = "Autonomous Rover Dashboard", int width = 1280, int height = 720);
     ~DashboardUI();
 
     bool isRunning() const { return m_running; }
@@ -16,6 +19,9 @@ public:
     void update(ServerPhoneCommunication& comm);
 
 private:
+    const FrameBuffer& m_frame_buffer;
+    const Telemetry& m_telemetry;
+
     SDL_Window* m_window = nullptr;
     SDL_Renderer* m_renderer = nullptr;
     SDL_Texture* m_texture = nullptr;

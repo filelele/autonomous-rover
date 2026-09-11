@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
-#include <atomic>
+#include <opencv2/core.hpp>
 
 struct RawYUVPlaneInput {
     const uint8_t* data = nullptr;
@@ -25,10 +25,12 @@ struct Frame {
     int width = 0;
     int height = 0;
     int rotation_degrees = 0;
-    int64_t timestamp_ns = 0;
+    int64_t timestamp_ms = 0;
 
     int plane_count = 0;
     std::array<Plane, 3> planes;
+
+    cv::Mat to_bgr() const;
 
     static std::shared_ptr<const Frame> from_android_image
     (
@@ -36,7 +38,7 @@ struct Frame {
         int width,
         int height,
         int rotation_degrees,
-        int64_t timestamp_ns,
+        int64_t timestamp_ms,
         const std::vector<RawYUVPlaneInput>& input_planes
     );
 };

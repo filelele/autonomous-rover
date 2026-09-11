@@ -1,13 +1,16 @@
-#include "FrameBuffer.hpp"
+#include "../include/FrameBuffer.hpp"
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
 #include <memory>
 #include <algorithm>
+#include <cstring>
 
 std::shared_ptr<const Frame> Frame::from_android_image(
     int format,
     int width,
     int height,
     int rotation_degrees,
-    int64_t timestamp_ns,
+    int64_t timestamp_ms,
     const std::vector<RawYUVPlaneInput>& input_planes) {
 
     std::shared_ptr<Frame> frame = std::make_shared<Frame>();
@@ -15,7 +18,7 @@ std::shared_ptr<const Frame> Frame::from_android_image(
     frame->width = width;
     frame->height = height;
     frame->rotation_degrees = rotation_degrees;
-    frame->timestamp_ns = timestamp_ns;
+    frame->timestamp_ms = timestamp_ms;
     frame->plane_count = static_cast<int>(std::min<size_t>(3, input_planes.size()));
 
     for (int i = 0; i < frame->plane_count; ++i) {
@@ -44,7 +47,6 @@ std::shared_ptr<const Frame> Frame::from_android_image(
                     }
                 }
             }
-
         } else {
             // Handle empty/null plane safety boundary
             dst.data.clear();
@@ -52,6 +54,22 @@ std::shared_ptr<const Frame> Frame::from_android_image(
     }
 
     return frame;
+}
+
+cv::Mat Frame::to_bgr() const {
+    if (width <= 0 || height <= 0 || plane_count < 3) return cv::Mat();
+    if (planes[0].data.empty() || planes[1].data.empty() || planes[2].data.empty()) return cv::Mat();
+
+    cv::Mat yuv(height * 3 / 2, width, CV_8UC1);
+    size_t y_size = static_cast<size_t>(width * height);
+    size_t uv_size = static_cast<size_t>((width / 2) * (height / 2));
+    std::memcpy(yuv.data, planes[0].data.data(), y_size);
+    std::memcpy(yuv.data + y_size, planes[1].data.data(), uv_size);
+    std::memcpy(yuv.data + y_size + uv_size, planes[2].data.data(), uv_size);
+
+    cv::Mat bgr;
+    cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR_I420);
+    return bgr;
 }
 
 FrameBuffer::FrameBuffer() : latest_frame(nullptr) {}

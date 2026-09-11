@@ -19,7 +19,7 @@
 class PhoneServerCommunication{
 
 public:
-PhoneServerCommunication(const FrameBuffer& frame_buffer, bool& manual_mode, bool& record_data);
+PhoneServerCommunication(const FrameBuffer& frame_buffer, Location& location, bool& manual_mode, bool& record_data, Telemetry& telemetry);
 ~PhoneServerCommunication();
 
 void initialize(int controlSignalPort = 8888, int videoSignalPort = 8889);
@@ -29,10 +29,10 @@ void stopCommunication();
 private:
     struct InOutData{
         const FrameBuffer& out_frame_buffer;
-        Location in_slow_location;
+        Location& in_location;
         bool& in_manual_mode;
         bool& in_record_data;
-        Telemetry out_telemetry;
+        Telemetry& out_telemetry;
     } in_out;
 
     std::atomic<bool> is_running{false};
@@ -51,8 +51,6 @@ private:
     Connection connection;
 
     std::unique_ptr<H265Encoder> encoder;
-
-    int64_t base_pts_us = 0;
     std::mutex send_mutex;
 
     size_t send_buffer_limit_bytes = 0 * 1024; // pause producing when buffered >= this 

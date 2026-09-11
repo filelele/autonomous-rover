@@ -5,7 +5,6 @@
 #include <camera/NdkCameraDevice.h>
 #include <camera/NdkCameraManager.h>
 #include <media/NdkImageReader.h>
-#include <memory>
 
 class Camera {
 public:
@@ -20,7 +19,13 @@ public:
     void start_stream(int fps = 30);
     void stop_stream();
 
+    uint64_t getBaseEpochMs() const { return m_base_epoch_ms; }
+    uint64_t getBaseBoottimeMs() const { return m_base_boottime_ms; }
+
 private:
+    uint64_t m_base_epoch_ms = 0;
+    uint64_t m_base_boottime_ms = 0;
+
     int m_res_width;
     int m_res_height;
     float m_focus_meters;

@@ -8,11 +8,13 @@
 #include <array>
 #include <cstdio>
 #include <opencv2/opencv.hpp>
+#include "FrameBuffer.hpp"
+#include "Location2D.hpp"
 #include "ServerPhoneCommunication.hpp"
 
 class LingbotMapLocalizer {
 public:
-    LingbotMapLocalizer(ServerPhoneCommunication& communication);
+    LingbotMapLocalizer(const FrameBuffer& frame_buffer, Location& location, ServerPhoneCommunication& communication);
     ~LingbotMapLocalizer();
 
     // Latest camera-to-world 4x4 matrix (row-major, float64). Empty if none yet.
@@ -28,6 +30,8 @@ private:
     static std::string pickImagesFolderWithDialog();
     static std::string pickModelFileWithDialog();
 
+    const FrameBuffer& frame_buffer;
+    Location& location;
     ServerPhoneCommunication& communication;
     std::atomic<bool> is_running{true};
     std::thread worker_thread;

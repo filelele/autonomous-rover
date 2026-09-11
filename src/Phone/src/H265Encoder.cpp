@@ -114,7 +114,7 @@ bool H265Encoder::encodeFrame(const FramePtr& frame){
     memcpy(buf + ySize, frame->planes[1].data.data(), uvSize);
     memcpy(buf + ySize + uvSize, frame->planes[2].data.data(), uvSize);
 
-    int64_t presentation_us = frame->timestamp_ns / 1000;
+    int64_t presentation_us = frame->timestamp_ms * 1000LL;
     media_status_t status = AMediaCodec_queueInputBuffer(impl->codec, idx, 0, static_cast<size_t>(total), presentation_us, 0);
     if (status != AMEDIA_OK) {
         LOGE("AMediaCodec_queueInputBuffer failed: %d", status);

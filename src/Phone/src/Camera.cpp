@@ -120,6 +120,12 @@ void Camera::start_stream(int fps) {
         return;
     }
 
+    struct timespec real_ts{}, boot_ts{};
+    clock_gettime(CLOCK_REALTIME, &real_ts);
+    clock_gettime(CLOCK_BOOTTIME, &boot_ts);
+    m_base_epoch_ms = static_cast<uint64_t>(real_ts.tv_sec) * 1000ULL + real_ts.tv_nsec / 1000000ULL;
+    m_base_boottime_ms = static_cast<uint64_t>(boot_ts.tv_sec) * 1000ULL + boot_ts.tv_nsec / 1000000ULL;
+
     // Prepare capture session configuration containers
     ACameraOutputTarget *outputTarget = nullptr;
     ACameraOutputTarget_create(m_imageReaderWindow, &outputTarget);
@@ -269,8 +275,13 @@ void Camera::onImageAvailable(void *context, AImageReader *reader) {
     AImage_getHeight(image, &height);
     AImage_getTimestamp(image, &timestamp_ns);
 
+    uint64_t boottime_ms = static_cast<uint64_t>(timestamp_ns / 1000000ULL);
+    int64_t relative_timestamp_ms = (instance->m_base_boottime_ms > 0 && boottime_ms >= instance->m_base_boottime_ms)
+        ? static_cast<int64_t>(boottime_ms - instance->m_base_boottime_ms)
+        : 0;
+
     auto new_frame = Frame::from_android_image(format, width, height, 0,
-                                                timestamp_ns, input_planes);
+                                                relative_timestamp_ms, input_planes);
 
     if (instance->m_frameBuffer != nullptr) {
         instance->m_frameBuffer->update_frame(std::move(new_frame));
