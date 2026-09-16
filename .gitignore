@@ -69,3 +69,5 @@ venv/
 **/tailscale_ip.json
 experiment/
 **/ndk
+*.yuv
+640x480-highquality_distortion_correction-0.4mfocus/
