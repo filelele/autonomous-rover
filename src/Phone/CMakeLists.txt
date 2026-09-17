@@ -42,6 +42,7 @@ add_library(phone_app SHARED
     src/PhoneServerCommunication.cpp
     src/H265Encoder.cpp
     src/Logger.cpp
+    src/ScreenRenderer.cpp
 )
 target_link_options(phone_app PRIVATE "-Wl,-u,ANativeActivity_onCreate")
 

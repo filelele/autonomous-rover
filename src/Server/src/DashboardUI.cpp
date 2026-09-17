@@ -46,6 +46,8 @@ void DashboardUI::handleEvents(ServerPhoneCommunication& comm) {
                     comm.toggleManualMode();
                 } else if (e.key.keysym.sym == SDLK_r) {
                     comm.toggleRecordData();
+                } else if (e.key.keysym.sym == SDLK_c) {
+                    comm.toggleCaptureMode();
                 }
             }
         }
@@ -81,17 +83,20 @@ void DashboardUI::update(ServerPhoneCommunication& comm) {
 
     bool manual_mode = m_telemetry.manual_mode_state;
     bool record_data = m_telemetry.record_data_state;
+    bool capture_mode = m_telemetry.capture_mode_state;
     std::string manual_modeText = "Manual Mode: ";
     std::string record_dataText = "Record Data: ";
+    std::string capture_modeText = "Capture Mode: ";
     manual_modeText += manual_mode ? "On" : "Off";
     record_dataText += record_data ? "On" : "Off";
+    capture_modeText += capture_mode ? "On" : "Off";
 
     float x = m_telemetry.location.x;
     float y = m_telemetry.location.y;
     float heading = m_telemetry.location.heading;
     std::string locationText = "Location: (" + std::to_string(x) + ", " + std::to_string(y) + "), Heading: " + std::to_string(heading);
 
-    std::string finalText = fpsText + " | " + manual_modeText + " | " + record_dataText + " | " + locationText;
+    std::string finalText = fpsText + " | " + manual_modeText + " | " + record_dataText + " | " + capture_modeText + " | " + locationText;
     cv::putText(displayFrame, finalText, cv::Point(30, 50),
                 cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
 

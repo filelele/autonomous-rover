@@ -19,8 +19,8 @@
 
 
 PhoneServerCommunication::PhoneServerCommunication(
-    const FrameBuffer& frame_buffer, Location& location, bool& manual_mode, bool& record_data, Telemetry& telemetry) : 
-    in_out{frame_buffer, location, manual_mode, record_data, telemetry}
+    const FrameBuffer& frame_buffer, Location& location, bool& manual_mode, bool& record_data, bool& capture_mode, Telemetry& telemetry) : 
+    in_out{frame_buffer, location, manual_mode, record_data, capture_mode, telemetry}
 {
     connection.control_udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
     connection.control_udp_addr.sin_family = AF_INET;
@@ -158,6 +158,7 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
                         if (msg_string.length() == 1) {
                             if (msg_string[0] == 'm') in_out.in_manual_mode = !in_out.in_manual_mode;
                             else if (msg_string[0] == 'r') in_out.in_record_data = !in_out.in_record_data;
+                            else if (msg_string[0] == 'c') in_out.in_capture_mode = !in_out.in_capture_mode;
                             else return;
                         }
                     });
@@ -389,6 +390,7 @@ void PhoneServerCommunication::telemetryStream(){
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         in_out.out_telemetry.manual_mode_state = in_out.in_manual_mode;
         in_out.out_telemetry.record_data_state = in_out.in_record_data;
+        in_out.out_telemetry.capture_mode_state = in_out.in_capture_mode;
         in_out.out_telemetry.location = in_out.in_location;
         if(connection.out_telemetry_channel && connection.out_telemetry_channel->isOpen()){
             std::string telemetry_msg = std::to_string(
@@ -396,7 +398,8 @@ void PhoneServerCommunication::telemetryStream(){
                 + std::to_string(in_out.out_telemetry.location.y) + "," 
                 + std::to_string(in_out.out_telemetry.location.heading) + "," 
                 + (in_out.out_telemetry.manual_mode_state ? "m1" : "m0") + "," 
-                + (in_out.out_telemetry.record_data_state ? "r1" : "r0");
+                + (in_out.out_telemetry.record_data_state ? "r1" : "r0") + ","
+                + (in_out.out_telemetry.capture_mode_state ? "c1" : "c0");
             connection.out_telemetry_channel->send(telemetry_msg);
         }
     }

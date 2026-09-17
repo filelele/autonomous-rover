@@ -7,6 +7,7 @@
 #include "Camera.hpp"
 #include "PhoneServerCommunication.hpp"
 #include "Logger.hpp"
+#include "ScreenRenderer.hpp"
 
 #define TAG "Main"
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__))
@@ -15,6 +16,7 @@ struct AppContext{
     Camera* camera;
     PhoneServerCommunication* phone_server_communication;
     Logger* logger;
+    ScreenRenderer* renderer;
 };
 
 void handle_android_cmd(struct android_app* app, int32_t cmd) {
@@ -24,14 +26,30 @@ void handle_android_cmd(struct android_app* app, int32_t cmd) {
             LOGI("Android gave us a screen surface! We can render here.");
             // Keep screen on
             ANativeActivity_setWindowFlags(app->activity, AWINDOW_FLAG_KEEP_SCREEN_ON, 0);
+            if (app_context && app_context->renderer) {
+                app_context->renderer->setWindow(app->window);
+            }
             break;
         case APP_CMD_TERM_WINDOW:
             LOGI("Screen surface destroyed or minimized. Stop processing.");
+            if (app_context && app_context->renderer) {
+                app_context->renderer->setWindow(nullptr);
+            }
             break;
         case APP_CMD_DESTROY:
             LOGI("App is shutting down entirely.");
             break;
     }
+}
+
+int32_t handle_android_input(struct android_app* app, AInputEvent* event) {
+    AppContext* app_context = static_cast<AppContext*>(app->userData);
+    if (app_context && app_context->renderer) {
+        if (app_context->renderer->handleInputEvent(event)) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 void android_main(struct android_app* state) {
@@ -42,6 +60,7 @@ void android_main(struct android_app* state) {
     Location location;
     bool manual_mode = false;
     bool record_data = false;
+    bool capture_mode = false;
     Telemetry telemetry;
 
     //Nodes
@@ -49,15 +68,22 @@ void android_main(struct android_app* state) {
     camera.init_camera();
     camera.start_stream(30);
 
-    PhoneServerCommunication phone_server_communication(frame_buffer, location, manual_mode, record_data, telemetry);
+    PhoneServerCommunication phone_server_communication(frame_buffer, location, manual_mode, record_data, capture_mode, telemetry);
     phone_server_communication.initialize(8888, 8889);
     phone_server_communication.startCommunication();
 
     Logger logger(frame_buffer, record_data, camera.getBaseEpochMs());
     logger.startLogging();
 
-    AppContext app_context = {&camera, &phone_server_communication, &logger};
+    ScreenRenderer screen_renderer(frame_buffer, capture_mode);
+    if (state->window != nullptr) {
+        screen_renderer.setWindow(state->window);
+    }
+    screen_renderer.start();
+
+    AppContext app_context = {&camera, &phone_server_communication, &logger, &screen_renderer};
     state->onAppCmd = handle_android_cmd;
+    state->onInputEvent = handle_android_input;
     state->userData = &app_context;
 
     while (true) {
@@ -71,6 +97,7 @@ void android_main(struct android_app* state) {
             }
             if (state->destroyRequested != 0) {
                 LOGI("Exiting C++ loop.");
+                screen_renderer.stop();
                 logger.stopLogging();
                 phone_server_communication.stopCommunication();
                 return;

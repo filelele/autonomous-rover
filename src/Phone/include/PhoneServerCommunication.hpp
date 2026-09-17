@@ -19,7 +19,7 @@
 class PhoneServerCommunication{
 
 public:
-PhoneServerCommunication(const FrameBuffer& frame_buffer, Location& location, bool& manual_mode, bool& record_data, Telemetry& telemetry);
+PhoneServerCommunication(const FrameBuffer& frame_buffer, Location& location, bool& manual_mode, bool& record_data, bool& capture_mode, Telemetry& telemetry);
 ~PhoneServerCommunication();
 
 void initialize(int controlSignalPort = 8888, int videoSignalPort = 8889);
@@ -32,6 +32,7 @@ private:
         Location& in_location;
         bool& in_manual_mode;
         bool& in_record_data;
+        bool& in_capture_mode;
         Telemetry& out_telemetry;
     } in_out;
 

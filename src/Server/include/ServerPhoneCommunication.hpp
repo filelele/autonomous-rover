@@ -69,9 +69,11 @@ public:
     
     void toggleManualMode();
     void toggleRecordData();
+    void toggleCaptureMode();
     void sendManualControl(float heading, float angle);
     bool getManualModeState() const { return in_out.in_telemetry.manual_mode_state; }
     bool getRecordDataState() const { return in_out.in_telemetry.record_data_state; }
+    bool getCaptureModeState() const { return in_out.in_telemetry.capture_mode_state; }
     double getIncomingFps() const { return fps_counter.incoming_fps; }
     const Telemetry& getTelemetry() const { return in_out.in_telemetry; }
 

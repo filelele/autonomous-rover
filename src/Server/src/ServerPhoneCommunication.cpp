@@ -109,15 +109,23 @@ void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int c
             size_t second_comma = msg_string.find(',', first_comma + 1);
             size_t third_comma = msg_string.find(',', second_comma + 1);
             size_t fourth_comma = msg_string.find(',', third_comma + 1);
+            size_t fifth_comma = (fourth_comma != std::string::npos) ? msg_string.find(',', fourth_comma + 1) : std::string::npos;
             if (first_comma != std::string::npos && second_comma != std::string::npos &&
-                third_comma != std::string::npos && fourth_comma != std::string::npos &&
-                msg_string.find(',', fourth_comma + 1) == std::string::npos) {
+                third_comma != std::string::npos && fourth_comma != std::string::npos) {
                 try {
                     float x = std::stof(msg_string.substr(0, first_comma));
                     float y = std::stof(msg_string.substr(first_comma + 1, second_comma - first_comma - 1));
                     float heading = std::stof(msg_string.substr(second_comma + 1, third_comma - second_comma - 1));
                     std::string manual_mode = msg_string.substr(third_comma + 1, fourth_comma - third_comma - 1);
-                    std::string record_mode = msg_string.substr(fourth_comma + 1);
+                    std::string record_mode;
+                    if (fifth_comma != std::string::npos) {
+                        record_mode = msg_string.substr(fourth_comma + 1, fifth_comma - fourth_comma - 1);
+                        std::string capture_mode = msg_string.substr(fifth_comma + 1);
+                        if (capture_mode == "c1") in_out.in_telemetry.capture_mode_state = true;
+                        else if (capture_mode == "c0") in_out.in_telemetry.capture_mode_state = false;
+                    } else {
+                        record_mode = msg_string.substr(fourth_comma + 1);
+                    }
 
                     if (manual_mode == "m1") in_out.in_telemetry.manual_mode_state = true;
                     else if (manual_mode == "m0") in_out.in_telemetry.manual_mode_state = false;
@@ -331,6 +339,12 @@ void ServerPhoneCommunication::toggleManualMode() {
 void ServerPhoneCommunication::toggleRecordData() {
     if (connection.out_mode_channel && connection.out_mode_channel->isOpen()) {
         connection.out_mode_channel->send("r");
+    }
+}
+
+void ServerPhoneCommunication::toggleCaptureMode() {
+    if (connection.out_mode_channel && connection.out_mode_channel->isOpen()) {
+        connection.out_mode_channel->send("c");
     }
 }
 
