@@ -1,0 +1,72 @@
+TLDR: - DON'T replace model's fx and fy with calibrated values.
+      - cx and cy can be replaced, but with small cautious.
+
+Intrinsic matrix:
+[[fx, s, cx],
+ [0, fy, cy],
+ [0, 0, 1]]
+
+The model produce:
+- pose_enc [B,S,9] (fx and fy and T (Translation) here)
+- depth [B,S,H,W,1]
+- depth_conf [B,S,H,W,1]
+
+Point 1:
+Depth = object close or far? 
+- Close ~ Large distance between pixels 
+- Far ~ Small distance between pixels 
+=> Depth = func(Distance between pixels) 
+          = func(x1 - x2)
+          = func(Xc1*fx/Zc1 - Xc2*fx/Zc2)
+          = func((Xc1/Zc1 - Xc2/Zc2)*fx)
+          or func(fx)
+    (Same for dim y)
+
+==> CONCLUSION 1: The model is very likely to infered depth based on its internal focal length.
+
+Point 2: 
+Given a point with R3 coordinate Xcam1 in when Cam at position Cam1, Xcam2 in when Cam at position Cam2.
+Its pixel coordinate is x_1 at Cam1 and x_2 at Cam2 respectively.
+The shift in pixel coordinate between 2 frames is: 
+
+x_1 - x_2 = (Xcam1/Zcam1 - Xcam2/Zcam2)*fx
+
+with:
+- shift x_1 - x_2 is fixed. (frames are there)
+- fx is infered by the model.
+- Zs are infered by the model.
+- X_cam1 and X_cam2 difference is the inverse T, which is also infered by the model from pose_enc.
+
+==> CONCLUSION 2: Replacing focal length here with calibrated focal length will break the formular above.
+
+Point 3:
+The model is not trained to adapt to (cx = W/2, cy = H/2) or any value of cx cy.
+cx and cy does not create inconsistency when pixels accross different frames need to be unprojected to same 3D point.
+cx and cy can affect the distance between different 3D points, which also come with different ratio between edges.
+
+Given 4 3D points with:
+X_1 = (x_1 - cx)*Z_1/fx
+X_2 = (x_2 - cx)*Z_2/fx
+X_3 = (x_3 - cx)*Z_3/fx
+X_4 = (x_4 - cx)*Z_4/fx
+=> X_1 - X_2 = x_1*Z_1/fx - x_2*Z_2/fx + cx*(Z_2/fx - Z_1/fx)
+=> X_3 - X_4 = x_3*Z_3/fx - x_4*Z_4/fx + cx*(Z_4/fx - Z_3/fx)
+
+=> Ratio of edges: r = (X_1 - X_2)/(X_3 - X_4)
+               
+with a slightly different cx'=cx+delta_x, we have:
+X_1' - X_2' = x_1*Z_1/fx - x_2*Z_2/fx + (cx+delta_x)*(Z_2/fx - Z_1/fx)
+              = X_1 - X_2 + delta_x*(Z_2/fx - Z_1/fx)
+X_3' - X_4' = x_3*Z_3/fx - x_4*Z_4/fx + (cx+delta_x)*(Z_4/fx - Z_3/fx)
+              = X_3 - X_4 + delta_x*(Z_4/fx - Z_3/fx)
+
+=> Ratio of edges: r' = (X_1' - X_2')/(X_3' - X_4')
+
+                      = (X_1 - X_2 + delta_x*(Z_2/fx - Z_1/fx))
+                        ------------------------------------------- != r
+                        (X_3 - X_4 + delta_x*(Z_4/fx - Z_3/fx)) 
+
+The difference between r and r' is negligible if Z_2 - Z_1 and Z_4 - Z_3 are small,
+and more severe between large edges at large depth (the phone cannot see that far anyway).
+
+==> CONCLUSION 3: cx and cy can be replaced by calibrated values, but with small cautious.
