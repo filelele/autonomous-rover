@@ -1,0 +1,46 @@
+At original size W_orig and H_orig, for a pixel (x_2d, y_2d), we have:
+
+(+) X_3d = (x_2d - c_x) * Z_3d / f_x
+(+) Y_3d = (y_2d - c_y) * Z_3d / f_y
+
+with:
+(+) c_x = W_orig / 2
+(+) c_y = H_orig / 2
+
+
+After resizing to W_new and H_new we have:
+
+(+) X'_3d = (x'_2d - c'_x) * Z_3d / f'_x
+(+) Y'_3d = (y'_2d - c'_y) * Z_3d / f'_y
+(+) x'_2d = x_2d * W_new / W_orig
+(+) y'_2d = y_2d * H_new / H_orig
+
+with the following adjustment to camera intrinsics:
+(+) c'_x = W_new / 2 => c'_x = c_x * W_new / W_orig
+(+) c'_y = H_new / 2 => c'_y = c_y * H_new / H_orig
+(+) f'_x = f_x * W_new / W_orig
+(+) f'_y = f_y * H_new / H_orig
+
+Let W_new / W_orig = r_w, H_new / H_orig = r_h, now we have:
+(+) x'_2d = x_2d * r_w
+(+) y'_2d = y_2d * r_h
+(+) c'_x = c_x * r_w
+(+) c'_y = c_y * r_h
+(+) f'_x = f_x * r_w
+(+) f'_y = f_y * r_h
+
+X'_3d = (x'_2d - c'_x) * Z_3d / f'_x
+      = (x_2d * r_w - c_x * r_w) * Z_3d / (f_x * r_w)
+      = r_w * (x_2d - c_x) * Z_3d / (f_x * r_w)
+      = (x_2d - c_x) * Z_3d / f_x
+      = X_3d
+
+Y'_3d = (y'_2d - c'_y) * Z_3d / f'_y
+      = (y_2d * r_h - c_y * r_h) * Z_3d / (f_y * r_h)
+      = r_h * (y_2d - c_y) * Z_3d / (f_y * r_h)
+      = (y_2d - c_y) * Z_3d / f_y
+      = Y_3d
+
+==> CONCLUSION: Resize doesn't affect unprojection to 3D, as long as intrinsic is scaled properly.
+
+
