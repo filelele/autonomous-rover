@@ -114,7 +114,7 @@ void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int c
                 third_comma != std::string::npos && fourth_comma != std::string::npos) {
                 try {
                     float x = std::stof(msg_string.substr(0, first_comma));
-                    float y = std::stof(msg_string.substr(first_comma + 1, second_comma - first_comma - 1));
+                    float z = std::stof(msg_string.substr(first_comma + 1, second_comma - first_comma - 1));
                     float heading = std::stof(msg_string.substr(second_comma + 1, third_comma - second_comma - 1));
                     std::string manual_mode = msg_string.substr(third_comma + 1, fourth_comma - third_comma - 1);
                     std::string record_mode;
@@ -132,7 +132,7 @@ void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int c
                     if (record_mode == "r1") in_out.in_telemetry.record_data_state = true;
                     else if (record_mode == "r0") in_out.in_telemetry.record_data_state = false;
                     in_out.in_telemetry.location.x = x;
-                    in_out.in_telemetry.location.y = y;
+                    in_out.in_telemetry.location.z = z;
                     in_out.in_telemetry.location.heading = heading;
                 } catch (const std::exception& e) {
                     std::cerr << "Error parsing telemetry data: " << e.what() << std::endl;
@@ -348,6 +348,16 @@ void ServerPhoneCommunication::toggleCaptureMode() {
     }
 }
 
+void ServerPhoneCommunication::sendCaptureSignal() {
+    if (connection.out_mode_channel && connection.out_mode_channel->isOpen()) {
+        connection.out_mode_channel->send("b");
+    }
+}
+
+void ServerPhoneCommunication::triggerCapture() {
+    sendCaptureSignal();
+}
+
 void ServerPhoneCommunication::sendManualControl(float heading, float angle) {
     if (connection.out_manual_control_channel && connection.out_manual_control_channel->isOpen()) {
         char buf[64];
@@ -359,7 +369,7 @@ void ServerPhoneCommunication::sendManualControl(float heading, float angle) {
 void ServerPhoneCommunication::sendLocation(Location loc/*, uint64_t timestamp_us*/) {
     if (connection.out_location_channel && connection.out_location_channel->isOpen()) {
         char buf[128];
-        snprintf(buf, sizeof(buf), "%.9f,%.9f,%.9f,%lld", loc.x, loc.y, loc.heading, static_cast<long long>(loc.timestamp));
+        snprintf(buf, sizeof(buf), "%.9f,%.9f,%.9f,%lld", loc.x, loc.z, loc.heading, static_cast<long long>(loc.timestamp));
         connection.out_location_channel->send(buf);
     }
 }

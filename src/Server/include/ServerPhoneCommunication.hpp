@@ -70,6 +70,8 @@ public:
     void toggleManualMode();
     void toggleRecordData();
     void toggleCaptureMode();
+    void sendCaptureSignal();
+    void triggerCapture();
     void sendManualControl(float heading, float angle);
     bool getManualModeState() const { return in_out.in_telemetry.manual_mode_state; }
     bool getRecordDataState() const { return in_out.in_telemetry.record_data_state; }

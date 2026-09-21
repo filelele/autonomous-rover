@@ -29,7 +29,7 @@ int main() {
     communication.initialize(phone_ip, control_port, video_port);
 
     LingbotMapLocalizer localizer(frame_buffer, location, communication);
-    DashboardUI ui(frame_buffer, telemetry, "Autonomous Rover Dashboard", 1280, 720);
+    DashboardUI ui(frame_buffer, telemetry, localizer.getMap(), "Autonomous Rover Dashboard", 1280, 720);
 
     auto last_control_send = std::chrono::steady_clock::now();
 

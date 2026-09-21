@@ -12,7 +12,9 @@ public:
            int res_width = 640, int res_height = 480, 
            float focus_meters = 0.4,
            float shutter_time_second = 1e-2,
-           int iso = 1600);
+           int iso = 1600,
+           float zoom_ratio = 1.0f,
+           int post_raw_boost = 100);
     ~Camera();
 
     bool init_camera();
@@ -32,6 +34,8 @@ private:
     int m_fps;
     float m_shutter_time_second;
     int m_iso;
+    float m_zoom_ratio;
+    int m_post_raw_boost;
 
     ACameraManager *m_cameraManager;
     ACameraIdList *m_cameraIdList;

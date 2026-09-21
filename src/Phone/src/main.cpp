@@ -64,7 +64,8 @@ void android_main(struct android_app* state) {
     Telemetry telemetry;
 
     //Nodes
-    Camera camera(&frame_buffer, 640, 480, 0.4f, 1.0f/120.0f, 6400); 
+    Camera camera(&frame_buffer, 640, 480, 0.4f, 1.0f/50.0f, 1600, 0.6f, 200); 
+    //Shutter speed 1/100 match my light flickering cycle, avoid rolling shutter horizontal bars
     camera.init_camera();
     camera.start_stream(30);
 
@@ -80,6 +81,10 @@ void android_main(struct android_app* state) {
         screen_renderer.setWindow(state->window);
     }
     screen_renderer.start();
+
+    phone_server_communication.setOnCaptureTrigger([&screen_renderer]() {
+        screen_renderer.triggerCapture();
+    });
 
     AppContext app_context = {&camera, &phone_server_communication, &logger, &screen_renderer};
     state->onAppCmd = handle_android_cmd;

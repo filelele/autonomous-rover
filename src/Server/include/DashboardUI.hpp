@@ -4,13 +4,16 @@
 #include <SDL2/SDL.h>
 #include <opencv2/opencv.hpp>
 #include <string>
+#include <chrono>
 #include "FrameBuffer.hpp"
 #include "Telemetry.hpp"
 #include "ServerPhoneCommunication.hpp"
+#include "OccupancyGridMap.hpp"
 
 class DashboardUI {
 public:
     DashboardUI(const FrameBuffer& frame_buffer, const Telemetry& telemetry,
+                const OccupancyGridMap& map,
                 const std::string& title = "Autonomous Rover Dashboard", int width = 1280, int height = 720);
     ~DashboardUI();
 
@@ -19,8 +22,11 @@ public:
     void update(ServerPhoneCommunication& comm);
 
 private:
+    void renderMinimap(cv::Mat& displayFrame);
+
     const FrameBuffer& m_frame_buffer;
     const Telemetry& m_telemetry;
+    const OccupancyGridMap& m_map;
 
     SDL_Window* m_window = nullptr;
     SDL_Renderer* m_renderer = nullptr;
@@ -28,6 +34,12 @@ private:
     bool m_running = false;
     int m_width;
     int m_height;
+
+    // Minimap state
+    float map_zoom_factor = 0.5f; // Default 0.5x of min map dimension, ranges [0.1x, 1.0x]
+
+    // Capture feedback
+    std::chrono::steady_clock::time_point m_last_capture_trigger_time{};
 };
 
 #endif

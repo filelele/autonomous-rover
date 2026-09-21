@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 #include <mutex>
 #include <arpa/inet.h>
+#include <functional>
 #include "H265Encoder.hpp"
 #include "Location2D.hpp"
 #include "Telemetry.hpp"
@@ -25,6 +26,9 @@ PhoneServerCommunication(const FrameBuffer& frame_buffer, Location& location, bo
 void initialize(int controlSignalPort = 8888, int videoSignalPort = 8889);
 void startCommunication();
 void stopCommunication();
+void setOnCaptureTrigger(std::function<void()> callback) {
+    on_capture_trigger = std::move(callback);
+}
 
 private:
     struct InOutData{
@@ -41,6 +45,7 @@ private:
     struct Connection{
         std::shared_ptr<rtc::PeerConnection> control_peer_connection;
         std::shared_ptr<rtc::PeerConnection> video_peer_connection;
+        
         std::shared_ptr<rtc::Track> out_video_track;
         std::shared_ptr<rtc::DataChannel> out_telemetry_channel;
         std::shared_ptr<rtc::DataChannel> in_mode_channel;
@@ -63,6 +68,7 @@ private:
 
     bool controlSignalingLoop(int port);
     bool videoSignalingLoop(int port);
+    std::function<void()> on_capture_trigger;
 };
 
 #endif

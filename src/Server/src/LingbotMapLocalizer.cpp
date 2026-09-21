@@ -8,6 +8,8 @@
 #include <csignal>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <fstream>
+#include <vector>
 
 LingbotMapLocalizer::LingbotMapLocalizer(const FrameBuffer& frame_buffer, Location& location, ServerPhoneCommunication& communication)
     : frame_buffer(frame_buffer), location(location), communication(communication) {
@@ -15,7 +17,6 @@ LingbotMapLocalizer::LingbotMapLocalizer(const FrameBuffer& frame_buffer, Locati
     // 2) zenity GTK dialog, only if a display is available (here I use ssh -X to forward the display to my laptop)
     std::cout << "[LingbotMapLocalizer] Starting localization thread..." << std::endl;
     std::cout << "[LingbotMapLocalizer] Pick fixed images folder..." << std::endl;
-    std::string images_folder;
     const char* env_folder = std::getenv("LINGBOT_IMAGES_DIR");
     if (env_folder && *env_folder) {
         images_folder = env_folder;
@@ -28,6 +29,8 @@ LingbotMapLocalizer::LingbotMapLocalizer(const FrameBuffer& frame_buffer, Locati
         std::cerr << "[LingbotMapLocalizer] No fixed images folder selected." << std::endl;
         return;
     }
+
+    loadOccupancyGrid(images_folder);
 
     if (!launchPython(images_folder)) {
         std::cerr << "[LingbotMapLocalizer] Python wrapper startup/KV-build failed "
@@ -182,17 +185,89 @@ std::array<double, 16> LingbotMapLocalizer::getLatestC2W() {
     return latest_c2w;
 }
 
+bool LingbotMapLocalizer::validateFrame(const cv::Mat& bgr, const FramePtr& frame, std::string& out_reason) {
+    // 1. Right shape check: phone camera always provides 640x480 BGR (CV_8UC3)
+    if (bgr.empty() || !bgr.data) {
+        out_reason = "empty BGR frame";
+        return false;
+    }
+    if (bgr.type() != CV_8UC3) {
+        out_reason = "wrong type (expected CV_8UC3, got " + std::to_string(bgr.type()) + ")";
+        return false;
+    }
+    if (bgr.cols != 640 || bgr.rows != 480) {
+        out_reason = "wrong shape: expected 640x480, got " + std::to_string(bgr.cols) + "x" + std::to_string(bgr.rows);
+        return false;
+    }
+
+    // 2. Fast 10x downsample (64x48) to inspect for missing packet gray artifacts (~0.02ms)
+    constexpr int SUB_W = 64;
+    constexpr int SUB_H = 48;
+    constexpr int TOTAL_PIXELS = SUB_W * SUB_H; // 3072
+    constexpr int NUM_BANDS = 8;
+    constexpr int BAND_WIDTH = SUB_W / NUM_BANDS; // 8 columns per band
+    constexpr int BAND_PIXELS = BAND_WIDTH * SUB_H; // 384 pixels per band
+
+    cv::Mat small;
+    cv::resize(bgr, small, cv::Size(SUB_W, SUB_H), 0, 0, cv::INTER_NEAREST);
+
+    // 3. Blackout check (camera disconnected or lens covered)
+    cv::Scalar mean_val = cv::mean(small);
+    double avg_brightness = (mean_val[0] + mean_val[1] + mean_val[2]) / 3.0;
+    if (avg_brightness < 5.0) {
+        out_reason = "blackout frame (brightness < 5.0)";
+        return false;
+    }
+
+    // 4. Blocky grey frame detection caused by H.265 missing packets / intra-refresh
+    // Decoder conceals missing packets/macroblocks with Y=128, U=128, V=128 => BGR ~(128, 128, 128) neutral gray.
+    // Periodic intra-refresh packet loss manifests as vertical gray bands or gray block patches.
+    int total_gray = 0;
+    std::array<int, NUM_BANDS> band_gray{};
+
+    for (int r = 0; r < SUB_H; ++r) {
+        const uint8_t* row_ptr = small.ptr<uint8_t>(r);
+        for (int c = 0; c < SUB_W; ++c) {
+            int b = row_ptr[c * 3 + 0];
+            int g = row_ptr[c * 3 + 1];
+            int red = row_ptr[c * 3 + 2];
+
+            // Neutral gray concealment: values near 128 with near-zero chroma/saturation
+            if (b >= 115 && b <= 140 && g >= 115 && g <= 140 && red >= 115 && red <= 140 &&
+                std::abs(b - g) <= 5 && std::abs(g - red) <= 5) {
+                total_gray++;
+                band_gray[c / BAND_WIDTH]++;
+            }
+        }
+    }
+
+    // Reject if overall gray ratio > 10%
+    if (total_gray > static_cast<int>(TOTAL_PIXELS * 0.10f)) {
+        out_reason = "blocky gray frame from packet loss (" +
+                     std::to_string(total_gray * 100 / TOTAL_PIXELS) + "% neutral gray)";
+        return false;
+    }
+
+    // Reject if any intra-refresh vertical column band has > 35% gray (column packet loss)
+    for (int b = 0; b < NUM_BANDS; ++b) {
+        if (band_gray[b] > static_cast<int>(BAND_PIXELS * 0.35f)) {
+            out_reason = "intra-refresh gray column drop in band " + std::to_string(b) +
+                         " (" + std::to_string(band_gray[b] * 100 / BAND_PIXELS) + "% gray)";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void LingbotMapLocalizer::localizationLoop() {
     int64_t last_localized_timestamp_ms = -1;
+    int consecutive_rejected_frames = 0;
+    auto last_reject_log_time = std::chrono::steady_clock::now();
+
     while (is_running.load(std::memory_order_acquire)) {
         auto frame = frame_buffer.get_latest_frame();
         if (!frame) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            continue;
-        }
-
-        cv::Mat bgr = frame->to_bgr();
-        if (bgr.empty()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
@@ -201,6 +276,28 @@ void LingbotMapLocalizer::localizationLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
+
+        cv::Mat bgr = frame->to_bgr();
+        std::string reject_reason;
+        if (!validateFrame(bgr, frame, reject_reason)) {
+            consecutive_rejected_frames++;
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_reject_log_time).count();
+            if (elapsed_ms >= 500) {
+                std::cerr << "[LingbotMapLocalizer] Dropping corrupted/invalid frame: " << reject_reason
+                          << " (consecutive drops: " << consecutive_rejected_frames << ")" << std::endl;
+                last_reject_log_time = now;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+
+        if (consecutive_rejected_frames > 0) {
+            std::cout << "[LingbotMapLocalizer] Frame stream recovered (" << bgr.cols << "x" << bgr.rows
+                      << ") after " << consecutive_rejected_frames << " dropped frame(s)." << std::endl;
+            consecutive_rejected_frames = 0;
+        }
+
         last_localized_timestamp_ms = frame->timestamp_ms;
 
         std::cout << "[LingbotMapLocalizer] Sending frame " << bgr.cols << "x"
@@ -221,7 +318,7 @@ void LingbotMapLocalizer::localizationLoop() {
             double tx = c2w[3], ty = c2w[7], tz = c2w[11];
             Location loc;
             loc.x = static_cast<float>(tx);
-            loc.y = static_cast<float>(tz);
+            loc.z = static_cast<float>(tz);
             // Camera forward direction (+Z of camera) expressed in world frame = third column of R
             loc.heading = static_cast<float>(std::atan2(c2w[2], c2w[10]));
             loc.timestamp = frame->timestamp_ms;
@@ -231,4 +328,61 @@ void LingbotMapLocalizer::localizationLoop() {
             std::cerr << "[LingbotMapLocalizer] Localization failed on frame." << std::endl;
         }
     }
+}
+
+void LingbotMapLocalizer::loadOccupancyGrid(const std::string& folder) {
+    std::string png_path = folder + "/occupancy_grid/occupancy_grid.png";
+    std::string yaml_path = folder + "/occupancy_grid/occupancy_grid.yaml";
+
+    map.image = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
+    if (map.image.empty()) {
+        std::cerr << "[LingbotMapLocalizer] Occupancy grid map not found at: " << png_path << std::endl;
+        map.loaded = false;
+        return;
+    }
+
+    std::ifstream yaml_file(yaml_path);
+    if (yaml_file.is_open()) {
+        std::string line;
+        bool in_origin = false;
+        std::vector<float> origin_vals;
+
+        while (std::getline(yaml_file, line)) {
+            size_t start = line.find_first_not_of(" \t\r\n");
+            if (start == std::string::npos) continue;
+            std::string s = line.substr(start);
+
+            if (s.rfind("resolution:", 0) == 0) {
+                try {
+                    map.resolution = std::stof(s.substr(11));
+                } catch (...) {}
+            } else if (s.rfind("origin:", 0) == 0) {
+                in_origin = true;
+                origin_vals.clear();
+            } else if (in_origin) {
+                if (s[0] == '-') {
+                    try {
+                        origin_vals.push_back(std::stof(s.substr(1)));
+                        if (origin_vals.size() >= 2) {
+                            map.origin_x = origin_vals[0];
+                            map.origin_z = origin_vals[1];
+                            in_origin = false;
+                        }
+                    } catch (...) {}
+                } else {
+                    in_origin = false;
+                }
+            }
+        }
+        yaml_file.close();
+    } else {
+        std::cerr << "[LingbotMapLocalizer] Occupancy grid yaml not found at: " << yaml_path
+                  << ", using default resolution=" << map.resolution << std::endl;
+    }
+
+    map.loaded = true;
+    std::cout << "[LingbotMapLocalizer] Loaded 2D Occupancy Grid: "
+              << map.image.cols << "x" << map.image.rows
+              << ", res: " << map.resolution
+              << ", origin: (" << map.origin_x << ", " << map.origin_z << ")" << std::endl;
 }

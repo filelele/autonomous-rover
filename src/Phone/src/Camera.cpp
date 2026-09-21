@@ -15,7 +15,9 @@ Camera::Camera(FrameBuffer *targetBuffer,
                int res_width, int res_height, 
                float focus_meters,
                float shutter_time_second,
-               int iso)
+               int iso,
+               float zoom_ratio,
+               int post_raw_boost)
     : m_cameraManager(nullptr), m_cameraIdList(nullptr),
       m_cameraDevice(nullptr), m_imageReader(nullptr),
       m_imageReaderWindow(nullptr), m_captureSession(nullptr),
@@ -23,7 +25,9 @@ Camera::Camera(FrameBuffer *targetBuffer,
       m_res_width(res_width), m_res_height(res_height),
       m_focus_meters(focus_meters),
       m_shutter_time_second(shutter_time_second),
-      m_iso(iso) {}
+      m_iso(iso),
+      m_zoom_ratio(zoom_ratio),
+      m_post_raw_boost(post_raw_boost) {}
 
 Camera::~Camera() { stop_stream(); }
 
@@ -40,8 +44,12 @@ bool Camera::init_camera() {
     return false;
     }
 
-    // Pick back cam
-    m_selectedCameraId = m_cameraIdList->cameraIds[0];
+    // Pick wide-angle camera of 0.6x zoom, back normal camera is 0, support 1.0 to 10.0
+    if (m_zoom_ratio != 0.6f) {
+        m_selectedCameraId = m_cameraIdList->cameraIds[0];
+    } else {
+        m_selectedCameraId = "2";
+    }
 
     // Set device callbacks: What to do when camera device has problem
     m_deviceCallbacks.context = this;
@@ -146,7 +154,7 @@ void Camera::start_stream(int fps) {
     int32_t targetFpsRange[2] = {fps, fps};
     ACaptureRequest_setEntry_i32(m_captureRequest, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, targetFpsRange);
 
-    // lock focus in meters
+    // lock focus in meters (maybe ignored in wide-angle camera)
     uint8_t afMode = ACAMERA_CONTROL_AF_MODE_OFF;
     ACaptureRequest_setEntry_u8(m_captureRequest, ACAMERA_CONTROL_AF_MODE, 1, &afMode);
     if(m_focus_meters == 0.0f) m_focus_meters = 0.1f;
@@ -164,6 +172,24 @@ void Camera::start_stream(int fps) {
     int64_t shutterTimeNs = static_cast<int64_t>(m_shutter_time_second * 1e9);
     ACaptureRequest_setEntry_i64(m_captureRequest, ACAMERA_SENSOR_EXPOSURE_TIME, 1, &shutterTimeNs);
     
+    // zoom
+    if(m_zoom_ratio != 0.6f){
+        ACaptureRequest_setEntry_float(m_captureRequest, ACAMERA_CONTROL_ZOOM_RATIO, 1, &m_zoom_ratio);
+    }
+
+    // digital post-raw sensitivity boost
+    if (m_post_raw_boost > 0) {
+        ACaptureRequest_setEntry_i32(m_captureRequest, ACAMERA_CONTROL_POST_RAW_SENSITIVITY_BOOST, 1, &m_post_raw_boost);
+    }
+
+    // hardware noise reduction
+    uint8_t noiseMode = ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY;
+    ACaptureRequest_setEntry_u8(m_captureRequest, ACAMERA_NOISE_REDUCTION_MODE, 1, &noiseMode);
+
+    // hot pixel correction (cleans up high ISO sensor pixel noise)
+    uint8_t hotPixelMode = ACAMERA_HOT_PIXEL_MODE_HIGH_QUALITY;
+    ACaptureRequest_setEntry_u8(m_captureRequest, ACAMERA_HOT_PIXEL_MODE, 1, &hotPixelMode);
+
     // hardware lens distortion correction
     uint8_t distortionMode = ACAMERA_DISTORTION_CORRECTION_MODE_HIGH_QUALITY;
     ACaptureRequest_setEntry_u8(m_captureRequest, ACAMERA_DISTORTION_CORRECTION_MODE, 1, &distortionMode);

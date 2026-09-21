@@ -40,13 +40,25 @@ fi
         pip install -e ".[vis]"
     fi
     ## sky-masking model
-    wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/skyseg_batch.onnx"
+    if [ ! -f "skyseg_batch.onnx" ]; then
+        echo "Downloading skyseg_batch.onnx..."
+        wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/skyseg_batch.onnx"
+    else
+        echo "skyseg_batch.onnx already exists. Skipping..."
+    fi
     pip install onnxruntime-gpu
 
     ## main model
-    wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/lingbot-map.pt"
-    mkdir -p ./lingbot_map/models/checkpoints
-    mv lingbot-map.pt ./lingbot_map/models/checkpoints/lingbot-map.pt
+    if [ ! -f "./lingbot_map/models/checkpoints/lingbot-map.pt" ]; then
+        if [ ! -f "lingbot-map.pt" ]; then
+            echo "Downloading lingbot-map.pt..."
+            wget -c "https://huggingface.co/robbyant/lingbot-map/resolve/main/lingbot-map.pt"
+        fi
+        mkdir -p ./lingbot_map/models/checkpoints
+        mv lingbot-map.pt ./lingbot_map/models/checkpoints/lingbot-map.pt
+    else
+        echo "lingbot-map.pt already exists. Skipping..."
+    fi
 )
 
 # build the executable

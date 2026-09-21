@@ -159,6 +159,16 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
                             if (msg_string[0] == 'm') in_out.in_manual_mode = !in_out.in_manual_mode;
                             else if (msg_string[0] == 'r') in_out.in_record_data = !in_out.in_record_data;
                             else if (msg_string[0] == 'c') in_out.in_capture_mode = !in_out.in_capture_mode;
+                            else if (msg_string[0] == 'b' || msg_string[0] == 's' || msg_string[0] == ' ') {
+                                if (in_out.in_capture_mode) {
+                                    LOGI("Received capture signal from server");
+                                    if (on_capture_trigger) {
+                                        on_capture_trigger();
+                                    }
+                                } else {
+                                    LOGI("Received capture signal from server, but capture mode is OFF. Ignoring.");
+                                }
+                            }
                             else return;
                         }
                     });
@@ -203,7 +213,7 @@ bool PhoneServerCommunication::controlSignalingLoop(int signalPort) {
                         size_t third_comma = msg.find(',', second_comma + 1);
 
                         in_out.in_location.x = std::stof(msg.substr(0, first_comma));
-                        in_out.in_location.y = std::stof(msg.substr(first_comma + 1, second_comma - first_comma - 1));
+                        in_out.in_location.z = std::stof(msg.substr(first_comma + 1, second_comma - first_comma - 1));
                         in_out.in_location.heading = std::stof(msg.substr(second_comma + 1, third_comma - second_comma - 1));
                         in_out.in_location.timestamp = std::stoull(msg.substr(third_comma + 1));
                         
@@ -395,7 +405,7 @@ void PhoneServerCommunication::telemetryStream(){
         if(connection.out_telemetry_channel && connection.out_telemetry_channel->isOpen()){
             std::string telemetry_msg = std::to_string(
                 in_out.out_telemetry.location.x) + "," 
-                + std::to_string(in_out.out_telemetry.location.y) + "," 
+                + std::to_string(in_out.out_telemetry.location.z) + "," 
                 + std::to_string(in_out.out_telemetry.location.heading) + "," 
                 + (in_out.out_telemetry.manual_mode_state ? "m1" : "m0") + "," 
                 + (in_out.out_telemetry.record_data_state ? "r1" : "r0") + ","

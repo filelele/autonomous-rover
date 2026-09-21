@@ -11,6 +11,7 @@
 #include "FrameBuffer.hpp"
 #include "Location2D.hpp"
 #include "ServerPhoneCommunication.hpp"
+#include "OccupancyGridMap.hpp"
 
 class LingbotMapLocalizer {
 public:
@@ -19,8 +20,10 @@ public:
 
     // Latest camera-to-world 4x4 matrix (row-major, float64). Empty if none yet.
     std::array<double, 16> getLatestC2W();
+    const OccupancyGridMap& getMap() const { return map; }
 
 private:
+    void loadOccupancyGrid(const std::string& images_folder);
     void localizationLoop();
     bool launchPython(const std::string& images_folder);
     bool buildKVCache(const std::string& images_folder);
@@ -29,6 +32,7 @@ private:
     void killPython();
     static std::string pickImagesFolderWithDialog();
     static std::string pickModelFileWithDialog();
+    bool validateFrame(const cv::Mat& bgr, const FramePtr& frame, std::string& out_reason);
 
     const FrameBuffer& frame_buffer;
     Location& location;
@@ -43,6 +47,8 @@ private:
     std::mutex result_mutex;
     std::array<double, 16> latest_c2w{};
     bool has_result = false;
+    std::string images_folder;
+    OccupancyGridMap map;
 };
 
 #endif
