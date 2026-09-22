@@ -12,7 +12,7 @@ The model produce:
 - depth_conf [B,S,H,W,1]
 
 Point 1:
-Depth = object close or far? 
+Depth = object close or far? For the same object:
 - Close ~ Large distance between pixels 
 - Far ~ Small distance between pixels 
 => Depth = func(Distance between pixels) 
@@ -25,7 +25,7 @@ Depth = object close or far?
 ==> CONCLUSION 1: The model is very likely to infered depth based on its internal focal length.
 
 Point 2: 
-Given a point with R3 coordinate Xcam1 in when Cam at position Cam1, Xcam2 in when Cam at position Cam2.
+Given a point with R3 coordinate Xcam1 when Cam at position Cam1, Xcam2 when Cam at position Cam2.
 Its pixel coordinate is x_1 at Cam1 and x_2 at Cam2 respectively.
 The shift in pixel coordinate between 2 frames is: 
 
@@ -54,17 +54,17 @@ X_4 = (x_4 - cx)*Z_4/fx
 
 => Ratio of edges: r = (X_1 - X_2)/(X_3 - X_4)
                
-with a slightly different cx'=cx+delta_x, we have:
-X_1' - X_2' = x_1*Z_1/fx - x_2*Z_2/fx + (cx+delta_x)*(Z_2/fx - Z_1/fx)
+with a slightly different cx'=cx+delta_cx, we have:
+X_1' - X_2' = x_1*Z_1/fx - x_2*Z_2/fx + (cx+delta_cx)*(Z_2/fx - Z_1/fx)
               = X_1 - X_2 + delta_x*(Z_2/fx - Z_1/fx)
-X_3' - X_4' = x_3*Z_3/fx - x_4*Z_4/fx + (cx+delta_x)*(Z_4/fx - Z_3/fx)
+X_3' - X_4' = x_3*Z_3/fx - x_4*Z_4/fx + (cx+delta_cx)*(Z_4/fx - Z_3/fx)
               = X_3 - X_4 + delta_x*(Z_4/fx - Z_3/fx)
 
 => Ratio of edges: r' = (X_1' - X_2')/(X_3' - X_4')
 
-                      = (X_1 - X_2 + delta_x*(Z_2/fx - Z_1/fx))
+                      = (X_1 - X_2 + delta_cx*(Z_2/fx - Z_1/fx))
                         ------------------------------------------- != r
-                        (X_3 - X_4 + delta_x*(Z_4/fx - Z_3/fx)) 
+                        (X_3 - X_4 + delta_cx*(Z_4/fx - Z_3/fx)) 
 
 The difference between r and r' is negligible if Z_2 - Z_1 and Z_4 - Z_3 are small,
 and more severe between large edges at large depth (the phone cannot see that far anyway).

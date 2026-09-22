@@ -1,6 +1,7 @@
 #include <native_app_glue/android_native_app_glue.h> //ignore intellisense complaint
 #include <android/log.h>
 #include <android/window.h>
+#include <vector>
 #include "FrameBuffer.hpp"
 #include "Location2D.hpp"
 #include "Telemetry.hpp"
@@ -63,8 +64,19 @@ void android_main(struct android_app* state) {
     bool capture_mode = false;
     Telemetry telemetry;
 
+    // Calibrated intrinsic matrix and distortion coefficients
+    std::vector<double> intrinsic = {
+        318.55824417,   0.0,         316.09348277,
+          0.0,         318.29384956, 239.85079561,
+          0.0,           0.0,          1.0
+    };
+    std::vector<double> distortion = {
+        -0.08450167, 0.00043739, -0.00099791, 0.00056242, -0.00286788
+    };
+
     //Nodes
-    Camera camera(&frame_buffer, 640, 480, 0.4f, 1.0f/50.0f, 1600, 0.6f, 200); 
+    Camera camera(&frame_buffer, 640, 480, 0.4f, 1.0f/50.0f, 1600, 0.6f, 200,
+                  true, intrinsic, distortion); 
     //Shutter speed 1/100 match my light flickering cycle, avoid rolling shutter horizontal bars
     camera.init_camera();
     camera.start_stream(30);

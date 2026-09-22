@@ -18,7 +18,7 @@ KEYFRAME_INTERVAL=2
 
 MODE="streaming" 
 MODEL_PATH="lingbot-map/lingbot_map/models/checkpoints/lingbot-map.pt"
-IMAGE_FOLDER="$HOME/Pictures/floor3_normal/frames"
+IMAGE_FOLDER="$HOME/Pictures/floor3_normal/distortion_corrected_frames"
 
 NUM_SCALE_FRAMES=4 
 # more = better, but this will spike on vram usage initially.

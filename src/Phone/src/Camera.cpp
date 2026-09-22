@@ -2,6 +2,8 @@
 #include "android/log.h"
 
 #include <camera/NdkCameraMetadataTags.h>
+#include <opencv2/calib3d.hpp>
+#include <opencv2/imgproc.hpp>
 #include <utility>
 #include <vector>
 
@@ -17,7 +19,11 @@ Camera::Camera(FrameBuffer *targetBuffer,
                float shutter_time_second,
                int iso,
                float zoom_ratio,
-               int post_raw_boost)
+               int post_raw_boost,
+               bool distortion_correction,
+               std::optional<std::vector<double>> intrinsic,
+               std::optional<std::vector<double>> distortion,
+               double alpha)
     : m_cameraManager(nullptr), m_cameraIdList(nullptr),
       m_cameraDevice(nullptr), m_imageReader(nullptr),
       m_imageReaderWindow(nullptr), m_captureSession(nullptr),
@@ -27,7 +33,12 @@ Camera::Camera(FrameBuffer *targetBuffer,
       m_shutter_time_second(shutter_time_second),
       m_iso(iso),
       m_zoom_ratio(zoom_ratio),
-      m_post_raw_boost(post_raw_boost) {}
+      m_post_raw_boost(post_raw_boost),
+      m_distortion_correction(distortion_correction),
+      m_intrinsic(std::move(intrinsic)),
+      m_distortion(std::move(distortion)),
+      m_alpha(alpha),
+      m_undistort_ready(false) {}
 
 Camera::~Camera() { stop_stream(); }
 
@@ -118,8 +129,70 @@ bool Camera::init_camera() {
 
     AImageReader_getWindow(m_imageReader, &m_imageReaderWindow);
 
+    if (m_distortion_correction) {
+        init_undistort_maps();
+    }
+
     LOGI("Camera initialization successed.");
     return true;
+}
+
+void Camera::init_undistort_maps() {
+    if (!m_intrinsic.has_value() || m_intrinsic->size() != 9 ||
+        !m_distortion.has_value() || m_distortion->empty()) {
+        LOGE("Cannot initialize undistort maps: intrinsic or distortion not provided or invalid size");
+        m_undistort_ready = false;
+        return;
+    }
+
+    cv::Mat K(3, 3, CV_64F, const_cast<double*>(m_intrinsic->data()));
+    cv::Mat dist(1, static_cast<int>(m_distortion->size()), CV_64F, const_cast<double*>(m_distortion->data()));
+
+    cv::Size size_y(m_res_width, m_res_height);
+    cv::Size size_uv(m_res_width / 2, m_res_height / 2);
+
+    // Camera matrix for half-resolution chroma UV planes
+    cv::Mat K_uv = K.clone();
+    K_uv.at<double>(0, 0) /= 2.0; // fx / 2
+    K_uv.at<double>(1, 1) /= 2.0; // fy / 2
+    K_uv.at<double>(0, 2) /= 2.0; // cx / 2
+    K_uv.at<double>(1, 2) /= 2.0; // cy / 2
+
+    cv::Mat newK_y;
+    cv::Mat newK_uv;
+
+    if (m_alpha >= 0.0) {
+        // alpha = 0.0: crops black borders completely
+        // alpha = 1.0: preserves all original pixels with curved black borders
+        newK_y = cv::getOptimalNewCameraMatrix(K, dist, size_y, m_alpha, size_y);
+        newK_uv = newK_y.clone();
+        newK_uv.at<double>(0, 0) /= 2.0;
+        newK_uv.at<double>(1, 1) /= 2.0;
+        newK_uv.at<double>(0, 2) /= 2.0;
+        newK_uv.at<double>(1, 2) /= 2.0;
+    } else {
+        // Default (alpha < 0): keeps original intrinsic matrix K unscaled
+        newK_y = K;
+        newK_uv = K_uv;
+    }
+
+    cv::initUndistortRectifyMap(
+        K, dist, cv::Mat(),
+        newK_y, size_y, CV_16SC2, m_map1_y, m_map2_y
+    );
+
+    cv::initUndistortRectifyMap(
+        K_uv, dist, cv::Mat(),
+        newK_uv, size_uv, CV_16SC2, m_map1_uv, m_map2_uv
+    );
+
+    m_dst_y.create(m_res_height, m_res_width, CV_8UC1);
+    m_dst_u.create(m_res_height / 2, m_res_width / 2, CV_8UC1);
+    m_dst_v.create(m_res_height / 2, m_res_width / 2, CV_8UC1);
+
+    m_undistort_ready = true;
+    LOGI("Software lens undistortion initialized for %dx%d (alpha=%.2f).",
+         m_res_width, m_res_height, m_alpha);
 }
 
 void Camera::start_stream(int fps) {
@@ -190,7 +263,7 @@ void Camera::start_stream(int fps) {
     uint8_t hotPixelMode = ACAMERA_HOT_PIXEL_MODE_HIGH_QUALITY;
     ACaptureRequest_setEntry_u8(m_captureRequest, ACAMERA_HOT_PIXEL_MODE, 1, &hotPixelMode);
 
-    // hardware lens distortion correction
+    // hardware lens distortion correction, doesnt work with wide-angle camera 2 anw
     uint8_t distortionMode = ACAMERA_DISTORTION_CORRECTION_MODE_HIGH_QUALITY;
     ACaptureRequest_setEntry_u8(m_captureRequest, ACAMERA_DISTORTION_CORRECTION_MODE, 1, &distortionMode);
 
@@ -308,6 +381,29 @@ void Camera::onImageAvailable(void *context, AImageReader *reader) {
 
     auto new_frame = Frame::from_android_image(format, width, height, 0,
                                                 relative_timestamp_ms, input_planes);
+
+    if (instance->m_distortion_correction && instance->m_undistort_ready && new_frame) {
+        auto mutable_frame = std::const_pointer_cast<Frame>(new_frame);
+        if (mutable_frame->plane_count >= 3 && !mutable_frame->planes[0].data.empty()) {
+            // Remap Y Plane (Full resolution)
+            cv::Mat src_y(height, width, CV_8UC1, mutable_frame->planes[0].data.data());
+            cv::remap(src_y, instance->m_dst_y, instance->m_map1_y, instance->m_map2_y, cv::INTER_LINEAR);
+            std::memcpy(mutable_frame->planes[0].data.data(), instance->m_dst_y.data, static_cast<size_t>(width * height));
+
+            // Remap U and V Planes (Half resolution)
+            int uv_w = width / 2;
+            int uv_h = height / 2;
+            size_t uv_size = static_cast<size_t>(uv_w * uv_h);
+
+            cv::Mat src_u(uv_h, uv_w, CV_8UC1, mutable_frame->planes[1].data.data());
+            cv::remap(src_u, instance->m_dst_u, instance->m_map1_uv, instance->m_map2_uv, cv::INTER_LINEAR);
+            std::memcpy(mutable_frame->planes[1].data.data(), instance->m_dst_u.data, uv_size);
+
+            cv::Mat src_v(uv_h, uv_w, CV_8UC1, mutable_frame->planes[2].data.data());
+            cv::remap(src_v, instance->m_dst_v, instance->m_map1_uv, instance->m_map2_uv, cv::INTER_LINEAR);
+            std::memcpy(mutable_frame->planes[2].data.data(), instance->m_dst_v.data, uv_size);
+        }
+    }
 
     if (instance->m_frameBuffer != nullptr) {
         instance->m_frameBuffer->update_frame(std::move(new_frame));

@@ -5,6 +5,9 @@
 #include <camera/NdkCameraDevice.h>
 #include <camera/NdkCameraManager.h>
 #include <media/NdkImageReader.h>
+#include <optional>
+#include <vector>
+#include <opencv2/core.hpp>
 
 class Camera {
 public:
@@ -14,7 +17,11 @@ public:
            float shutter_time_second = 1e-2,
            int iso = 1600,
            float zoom_ratio = 1.0f,
-           int post_raw_boost = 100);
+           int post_raw_boost = 100,
+           bool distortion_correction = false,
+           std::optional<std::vector<double>> intrinsic = std::nullopt,
+           std::optional<std::vector<double>> distortion = std::nullopt,
+           double alpha = -1.0); // alpha < 0: default (keeps K unchanged), 0.0: crop black borders, 1.0: retain all pixels with black corners
     ~Camera();
 
     bool init_camera();
@@ -36,6 +43,22 @@ private:
     int m_iso;
     float m_zoom_ratio;
     int m_post_raw_boost;
+    bool m_distortion_correction;
+    std::optional<std::vector<double>> m_intrinsic;
+    std::optional<std::vector<double>> m_distortion;
+    double m_alpha;
+    bool m_undistort_ready = false;
+
+    // Precomputed remap tables and scratch buffers for software undistortion
+    cv::Mat m_map1_y;
+    cv::Mat m_map2_y;
+    cv::Mat m_map1_uv;
+    cv::Mat m_map2_uv;
+    cv::Mat m_dst_y;
+    cv::Mat m_dst_u;
+    cv::Mat m_dst_v;
+
+    void init_undistort_maps();
 
     ACameraManager *m_cameraManager;
     ACameraIdList *m_cameraIdList;
