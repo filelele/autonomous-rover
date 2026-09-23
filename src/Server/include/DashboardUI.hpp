@@ -7,12 +7,14 @@
 #include <chrono>
 #include "FrameBuffer.hpp"
 #include "Telemetry.hpp"
+#include "Location2D.hpp"
 #include "ServerPhoneCommunication.hpp"
 #include "OccupancyGridMap.hpp"
 
 class DashboardUI {
 public:
     DashboardUI(const FrameBuffer& frame_buffer, const Telemetry& telemetry,
+                const Location& location,
                 const OccupancyGridMap& map,
                 const std::string& title = "Autonomous Rover Dashboard", int width = 1280, int height = 720);
     ~DashboardUI();
@@ -26,6 +28,7 @@ private:
 
     const FrameBuffer& m_frame_buffer;
     const Telemetry& m_telemetry;
+    const Location& m_location;
     const OccupancyGridMap& m_map;
 
     SDL_Window* m_window = nullptr;
