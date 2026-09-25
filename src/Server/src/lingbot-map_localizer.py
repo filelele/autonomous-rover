@@ -213,7 +213,7 @@ class LingbotMapLocalizer:
 
         # Stage 1: Coarse Global Similarity Search (retrieve Top-30 candidates)
         global_sims = torch.mv(self.map_descriptors, query_global.float())
-        coarse_k = min(30, len(global_sims))
+        coarse_k = min(20, len(global_sims))
         _, cand_indices = torch.topk(global_sims, k=coarse_k)
 
         # Stage 2: Fine Windowed MaxSim Re-Ranking on candidates
@@ -244,8 +244,8 @@ class LingbotMapLocalizer:
         valid_indices = np.array(valid_indices, dtype=int)
         valid_vals = np.array(valid_vals, dtype=float)
 
-        # Softmax similarity weighting (temperature = 0.05)
-        exp_w = np.exp((valid_vals - valid_vals[0]) / 0.05)
+        # Softmax similarity weighting (temperature = 0.1)
+        exp_w = np.exp((valid_vals - valid_vals[0]) / 0.1)
         weights = exp_w / np.sum(exp_w)
 
         # Weighted average position (tx, ty, tz)
