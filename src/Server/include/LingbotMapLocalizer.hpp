@@ -18,21 +18,21 @@ public:
     LingbotMapLocalizer(const FrameBuffer& frame_buffer, Location& location, ServerPhoneCommunication& communication);
     ~LingbotMapLocalizer();
 
-    // Latest camera-to-world 4x4 matrix (row-major, float64). Empty if none yet.
+    // Latest camera-to-world 4x4 matrix (row-major, float64).
     std::array<double, 16> getLatestC2W();
     const OccupancyGridMap& getMap() const { return map; }
 
 private:
-    void loadOccupancyGrid(const std::string& images_folder);
+    void loadOccupancyGrid(const std::string& folder);
     void localizationLoop();
-    bool launchPython(const std::string& images_folder);
-    bool buildKVCache(const std::string& images_folder);
+    bool launchPython(const std::string& folder);
+    bool loadMapReference(const std::string& folder);
     bool sendFrame(const cv::Mat& bgr);
-    bool readResult(std::array<double, 16>& c2w_out); // false on failed frame
+    bool readResult(std::array<double, 16>& c2w_out);
     void killPython();
-    static std::string pickImagesFolderWithDialog();
-    static std::string pickModelFileWithDialog();
-    bool validateFrame(const cv::Mat& bgr, const FramePtr& frame, std::string& out_reason);
+    static std::string pickImagesFolder();
+    static std::string pickModelFile();
+    bool validateFrame(const cv::Mat& bgr, std::string& out_reason);
 
     const FrameBuffer& frame_buffer;
     Location& location;
@@ -46,8 +46,6 @@ private:
 
     std::mutex result_mutex;
     std::array<double, 16> latest_c2w{};
-    bool has_result = false;
-    std::string images_folder;
     OccupancyGridMap map;
 };
 

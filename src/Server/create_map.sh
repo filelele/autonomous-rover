@@ -3,25 +3,28 @@ set -e
 
 ENV_NAME="lingbot-map"
 
-USE_SDPA=false
+USE_SDPA=true
 # set to fall to enable FlashInfer for faster inference with more vram usage, not required here
 
 # Enable per-keyframe KV cache & VRAM growth tracking
 export LINGBOT_DEBUG_KV=1
 
-KV_CACHE_SLIDING_WINDOW=20 #max on rtx4060ti is 78
+KV_CACHE_SLIDING_WINDOW=77 #max on rtx4060ti is 78
 # depends on number of scene images available and vram available. 
 # More vram = more scene images = better kv cache
 
-KEYFRAME_INTERVAL=2
+KEYFRAME_INTERVAL=1
 # Manually tune this and KV_CACHE_SLIDING_WINDOW based on Vram available and scene images needed to cover whole scene.
 
 MODE="streaming" 
 MODEL_PATH="lingbot-map/lingbot_map/models/checkpoints/lingbot-map.pt"
-IMAGE_FOLDER="$HOME/Pictures/floor3_normal/distortion_corrected_frames"
+IMAGE_FOLDER="$HOME/Pictures/floor1_normal/denoised_frames"
 
 NUM_SCALE_FRAMES=4 
 # more = better, but this will spike on vram usage initially.
+
+POINTCLOUD_DOWNSAMPLE_FACTOR=10
+DEPTH_CONF_THRESHOLD=1.5
 
 # Check if conda is initialized; if not, initialize it
 if ! command -v conda &> /dev/null; then
@@ -57,6 +60,8 @@ ARGS+=(
     --model_path "$MODEL_PATH"
     --image_folder "$IMAGE_FOLDER"
     --num_scale_frames "$NUM_SCALE_FRAMES"
+    --downsample_factor "$POINTCLOUD_DOWNSAMPLE_FACTOR"
+    --conf_threshold "$DEPTH_CONF_THRESHOLD"
 )
 
 python lingbot-map/demo.py "${ARGS[@]}"
