@@ -54,6 +54,7 @@ void DashboardUI::handleEvents(ServerPhoneCommunication& comm) {
                 }
             } else if (e.key.repeat == 0) {
                 switch (e.key.keysym.sym) {
+                    case SDLK_TAB: m_map_expanded = !m_map_expanded; break;
                     case SDLK_m: comm.toggleManualMode(); break;
                     case SDLK_r: comm.toggleRecordData(); break;
                     case SDLK_c: comm.toggleCaptureMode(); break;
@@ -135,15 +136,6 @@ void DashboardUI::update(ServerPhoneCommunication& comm) {
 void DashboardUI::renderMinimap(cv::Mat& displayFrame) {
     if (!m_map.loaded || m_map.image.empty()) return;
 
-    // Minimap diameter: 1/4 of frame width (minimum 64px)
-    int D = std::max(64, displayFrame.cols / 4);
-    int R = D / 2;
-
-    int margin = 20;
-    int roi_x = displayFrame.cols - D - margin;
-    int roi_y = displayFrame.rows - D - margin;
-    if (roi_x < 0 || roi_y < 0) return;
-
     // Rover coordinates in map grid cells
     float rover_x = std::isfinite(m_location.x) ? m_location.x : m_map.origin_x;
     float rover_z = std::isfinite(m_location.z) ? m_location.z : m_map.origin_z;
@@ -151,6 +143,75 @@ void DashboardUI::renderMinimap(cv::Mat& displayFrame) {
 
     float map_x = (rover_x - m_map.origin_x) / res;
     float map_y = static_cast<float>(m_map.image.rows - 1) - (rover_z - m_map.origin_z) / res;
+
+    const int margin = 20;
+
+    if (m_map_expanded) {
+        // Largest side = 1/2 width of whole frame, smaller side scaled to keep aspect ratio
+        int max_side = std::max(64, displayFrame.cols / 2);
+        int map_w = m_map.image.cols;
+        int map_h = m_map.image.rows;
+        if (map_w <= 0 || map_h <= 0) return;
+
+        int render_w = 0;
+        int render_h = 0;
+        if (map_w >= map_h) {
+            render_w = max_side;
+            render_h = std::max(1, static_cast<int>(std::round(max_side * static_cast<double>(map_h) / map_w)));
+        } else {
+            render_h = max_side;
+            render_w = std::max(1, static_cast<int>(std::round(max_side * static_cast<double>(map_w) / map_h)));
+        }
+
+        int roi_x = displayFrame.cols - render_w - margin;
+        int roi_y = displayFrame.rows - render_h - margin;
+        if (roi_x < 0 || roi_y < 0) return;
+
+        cv::Mat map_resized;
+        cv::resize(m_map.image, map_resized, cv::Size(render_w, render_h), 0, 0, cv::INTER_NEAREST);
+
+        cv::Mat map_bgr;
+        if (map_resized.channels() == 1) {
+            cv::cvtColor(map_resized, map_bgr, cv::COLOR_GRAY2BGR);
+        } else {
+            map_bgr = map_resized;
+        }
+
+        cv::Mat roi = displayFrame(cv::Rect(roi_x, roi_y, render_w, render_h));
+        cv::addWeighted(map_bgr, 0.7, roi, 0.3, 0.0, roi);
+
+        // Rectangular bezel border
+        cv::rectangle(roi, cv::Point(0, 0), cv::Point(render_w - 1, render_h - 1), cv::Scalar(255, 255, 255), 2);
+
+        // Rover marker position on the resized map
+        int rx = static_cast<int>(std::round(map_x * (static_cast<double>(render_w) / map_w)));
+        int ry = static_cast<int>(std::round(map_y * (static_cast<double>(render_h) / map_h)));
+
+        if (rx >= 0 && rx < render_w && ry >= 0 && ry < render_h) {
+            cv::line(roi, cv::Point(std::max(0, rx - 10), ry), cv::Point(std::min(render_w - 1, rx + 10), ry), cv::Scalar(0, 220, 255), 1, cv::LINE_AA);
+            cv::line(roi, cv::Point(rx, std::max(0, ry - 10)), cv::Point(rx, std::min(render_h - 1, ry + 10)), cv::Scalar(0, 220, 255), 1, cv::LINE_AA);
+
+            cv::circle(roi, cv::Point(rx, ry), 5, cv::Scalar(0, 0, 255), -1, cv::LINE_AA);
+            cv::circle(roi, cv::Point(rx, ry), 5, cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
+            cv::circle(roi, cv::Point(rx, ry), 1, cv::Scalar(255, 255, 255), -1, cv::LINE_AA);
+        }
+
+        // Full map badge
+        const char* badge_text = "Full Map";
+        int baseline = 0;
+        cv::Size text_size = cv::getTextSize(badge_text, cv::FONT_HERSHEY_SIMPLEX, 0.38, 1, &baseline);
+        cv::putText(roi, badge_text, cv::Point(render_w / 2 - text_size.width / 2, render_h - 8),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.38, cv::Scalar(200, 200, 200), 1, cv::LINE_AA);
+        return;
+    }
+
+    // Circular minimap diameter: 1/4 of frame width (minimum 64px)
+    int D = std::max(64, displayFrame.cols / 4);
+    int R = D / 2;
+
+    int roi_x = displayFrame.cols - D - margin;
+    int roi_y = displayFrame.rows - D - margin;
+    if (roi_x < 0 || roi_y < 0) return;
 
     // Affine transformation for centered crop
     int min_dim = std::min(m_map.image.cols, m_map.image.rows);

@@ -40,6 +40,7 @@ private:
 
     // Minimap state
     float map_zoom_factor = 0.5f; // Default 0.5x of min map dimension, ranges [0.1x, 1.0x]
+    bool m_map_expanded = false;
 
     // Capture feedback
     std::chrono::steady_clock::time_point m_last_capture_trigger_time{};
