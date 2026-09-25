@@ -70,4 +70,3 @@ venv/
 experiment/
 **/ndk
 *.yuv
-640x480-highquality_distortion_correction-0.4mfocus/
