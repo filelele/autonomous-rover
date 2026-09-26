@@ -17,7 +17,7 @@
 
 </div>
 
-https://github.com/user-attachments/assets/ec5cdad4-3233-4841-9ea6-327625f99458
+https://github.com/user-attachments/assets/bb934ae0-9f58-4f57-9ae6-df734b92bf9e
 
 Goal: Go from a place to another place on an offline map, avoid obstacles using neural network, utilize home-available hardwares, buy as little as possible.
 
