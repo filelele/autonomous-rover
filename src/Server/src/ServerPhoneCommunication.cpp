@@ -253,7 +253,6 @@ void ServerPhoneCommunication::initialize(const std::string& publisher_ip, int c
                 while (decode_queue.size() > 2) decode_queue.pop();
             }
             queue_cv.notify_one();
-            fps_counter.frame_accumulator++;
         });
 
         video_pc->setLocalDescription(rtc::Description::Type::Offer);
@@ -318,6 +317,7 @@ void ServerPhoneCommunication::decoderWorker() {
         FramePtr decoded_frame = decoder.decode(reinterpret_cast<const uint8_t*>(frame.data.data()), frame.data.size(), timestamp_ms);
         if (decoded_frame) {
             in_out.in_frame_buffer.update_frame(std::move(decoded_frame));
+            fps_counter.frame_accumulator++;
         }
 
         auto now_steady = std::chrono::steady_clock::now();
