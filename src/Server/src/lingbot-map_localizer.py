@@ -90,6 +90,10 @@ class LingbotMapLocalizer:
         self.sigma_luma = 1.2
 
         self.spatial_threshold: float = 1.0  # Computed dynamically in loadReferenceMap
+        self.jump_threshold: float = 3.0     # 3 * spatial_threshold
+        self.prev_pos: Optional[np.ndarray] = None
+        self.prev_yaw: Optional[float] = None
+        self.jump_count: int = 0
 
         self.model = self._init_model()
 
@@ -180,12 +184,19 @@ class LingbotMapLocalizer:
         grid_size = map_cfg["grid_size"]
         map_w_m = float(grid_size[0]) * resolution
         map_h_m = float(grid_size[1]) * resolution
-        self.spatial_threshold = min(map_w_m, map_h_m) / 10.0
+        if len(self.map_positions) > 1:
+            diffs = np.diff(self.map_positions, axis=0)
+            consec_dists = np.hypot(diffs[:, 0], diffs[:, 2])
+            self.spatial_threshold = float(np.max(consec_dists))
+        else:
+            self.spatial_threshold = 1.0
+
+        self.jump_threshold = 3.0 * self.spatial_threshold
 
         self.map_ready = True
         print(
             f"[Localizer] Loaded {len(self.map_positions)} reference frames. "
-            f"Map: {map_w_m:.2f}m x {map_h_m:.2f}m -> Spatial clustering dist <= {self.spatial_threshold:.2f}m",
+            f"Map: {map_w_m:.2f}m x {map_h_m:.2f}m -> Spatial step <= {self.spatial_threshold:.3f}m, Jump threshold (3R) <= {self.jump_threshold:.3f}m",
             file=sys.stderr,
             flush=True,
         )
@@ -256,6 +267,27 @@ class LingbotMapLocalizer:
         sin_yaw = np.sum(weights * np.sin(candidate_yaws))
         cos_yaw = np.sum(weights * np.cos(candidate_yaws))
         pred_yaw = np.arctan2(sin_yaw, cos_yaw)
+
+        # Temporal jump stabilization: reject jumps > 3R unless sustained for 10 frames
+        if self.prev_pos is not None:
+            jump_dist = np.hypot(pred_pos[0] - self.prev_pos[0], pred_pos[2] - self.prev_pos[2])
+            if jump_dist > self.jump_threshold:
+                self.jump_count += 1
+                if self.jump_count < 20:
+                    pred_pos = self.prev_pos
+                    pred_yaw = self.prev_yaw
+                else:
+                    self.prev_pos = pred_pos
+                    self.prev_yaw = pred_yaw
+                    self.jump_count = 0
+            else:
+                self.prev_pos = pred_pos
+                self.prev_yaw = pred_yaw
+                self.jump_count = 0
+        else:
+            self.prev_pos = pred_pos
+            self.prev_yaw = pred_yaw
+            self.jump_count = 0
 
         # Construct 4x4 Camera-to-World (c2w) matrix
         c2w = np.eye(4, dtype=np.float64)
