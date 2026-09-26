@@ -1,0 +1,40 @@
+Offline Mapping -> Online Localization:
+
+For a Scene:
+1. Offline mapping time:
+    Reference Scene Frames (640x480)
+    ↓ [Denoising & Aspect-Preserving Resize]
+    Normalized Frames (392x518 = 28x37 grid of 14px patches)
+    ↓ [GCTStream Backbone Forward Hook]
+    Extract Features:
+    ├─ Patch Tokens: [N, 1036, 1024] (float16)
+    ├─ Global Descriptors: [N, 1024] (float32, L2-normalized)
+    └─ Poses: SE3 Extrinsics -> Camera-to-World (C2W), Positions (tx, ty, tz), Yaws
+    ↓ [Save Compressed]
+    map_reference.npz & occupancy_grid.yaml
+    ↓ [LingbotMapLocalizer Startup]
+    Load onto GPU & Precompute:
+    ├─ Spatial Step (R) = max(consecutive distances) = 0.314 m
+    ├─ Temporal Jump Gate (3R) = 0.942 m
+    └─ Window Mask [1036, 1036] (dr <= 5 rows, dc <= 7 cols)
+
+2. Runtime:
+    Live Camera Frame (640x480)
+    ↓ [Denoising Filter: Gaussian Luma 3x3 + Gaussian Chroma 11x11]
+    Normalized Tensor (392x518)
+    ↓ [GCTStream patch_embed]
+    Extract Features (1036 patches of 1024-d + L2 mean global descriptor)
+    ↓ [Stage 1: GPU Matrix-Vector Dot Product]
+    Top-30 Candidate Frames (< 0.05 ms)
+    ↓ [Stage 2: Batched Windowed MaxSim (window dr<=5, dc<=7)]
+    Top-3 Fine Candidates (fine scores)
+    ↓ [Spatial Outlier Filter: discard candidates with dist(Top-1) > R]
+    Surviving Candidates (within R = 0.314 m of Top-1)
+    ↓ [Softmax Pose Weighting (Temp = 0.1) & Circular Trigonometric Yaw]
+    Raw Estimated Pose: pred_pos, pred_yaw
+    ↓ [Temporal Jump Gate: dist(pred_pos, prev_pos) > 3R = 0.942 m ?]
+    ├─ If Jump (> 0.942 m) & < 20 frames: REJECT (hold prev_pos)
+    └─ If Valid or Sustained >= 20 frames: ACCEPT (update prev_pos)
+    ↓
+    Final 4x4 C2W Pose Matrix -> Dashboard Minimap & Server Control
+
