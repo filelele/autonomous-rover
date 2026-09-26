@@ -136,13 +136,41 @@ void DashboardUI::update(ServerPhoneCommunication& comm) {
 void DashboardUI::renderMinimap(cv::Mat& displayFrame) {
     if (!m_map.loaded || m_map.image.empty()) return;
 
+    // Trajectory map canvas is initialized and reset on new recording session
+    bool recording = m_telemetry.record_data_state;
+    if (m_trajectory_map.empty() || m_trajectory_map.size() != m_map.image.size() || (recording && !m_prev_record_state)) {
+        cv::cvtColor(m_map.image, m_trajectory_map, cv::COLOR_GRAY2BGR);
+        m_has_prev_pos = false;
+    }
+    m_prev_record_state = recording;
+
     // Rover coordinates in map grid cells
-    float rover_x = std::isfinite(m_location.x) ? m_location.x : m_map.origin_x;
-    float rover_z = std::isfinite(m_location.z) ? m_location.z : m_map.origin_z;
+    bool loc_valid = std::isfinite(m_location.x) && std::isfinite(m_location.z);
+    float rover_x = loc_valid ? m_location.x : m_map.origin_x;
+    float rover_z = loc_valid ? m_location.z : m_map.origin_z;
     float res = m_map.resolution > 1e-5f ? m_map.resolution : 0.05f;
 
     float map_x = (rover_x - m_map.origin_x) / res;
     float map_y = static_cast<float>(m_map.image.rows - 1) - (rover_z - m_map.origin_z) / res;
+
+    if (recording && loc_valid) {
+        int gx = static_cast<int>(std::round(map_x));
+        int gy = static_cast<int>(std::round(map_y));
+        if (gx >= 0 && gx < m_trajectory_map.cols && gy >= 0 && gy < m_trajectory_map.rows) {
+            cv::Point curr_pt(gx, gy);
+            if (m_has_prev_pos) {
+                if (curr_pt != m_prev_map_pt) {
+                    cv::line(m_trajectory_map, m_prev_map_pt, curr_pt, cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+                    m_prev_map_pt = curr_pt;
+                }
+            } else {
+                m_prev_map_pt = curr_pt;
+                m_has_prev_pos = true;
+            }
+        }
+    } else if (!recording) {
+        m_has_prev_pos = false;
+    }
 
     const int margin = 20;
 
@@ -167,15 +195,8 @@ void DashboardUI::renderMinimap(cv::Mat& displayFrame) {
         int roi_y = displayFrame.rows - render_h - margin;
         if (roi_x < 0 || roi_y < 0) return;
 
-        cv::Mat map_resized;
-        cv::resize(m_map.image, map_resized, cv::Size(render_w, render_h), 0, 0, cv::INTER_NEAREST);
-
         cv::Mat map_bgr;
-        if (map_resized.channels() == 1) {
-            cv::cvtColor(map_resized, map_bgr, cv::COLOR_GRAY2BGR);
-        } else {
-            map_bgr = map_resized;
-        }
+        cv::resize(m_trajectory_map, map_bgr, cv::Size(render_w, render_h), 0, 0, cv::INTER_NEAREST);
 
         cv::Mat roi = displayFrame(cv::Rect(roi_x, roi_y, render_w, render_h));
         cv::addWeighted(map_bgr, 0.7, roi, 0.3, 0.0, roi);
@@ -223,12 +244,9 @@ void DashboardUI::renderMinimap(cv::Mat& displayFrame) {
         0.0,   scale, static_cast<double>(R) - scale * map_y
     );
 
-    cv::Mat minimap_patch;
-    cv::warpAffine(m_map.image, minimap_patch, M, cv::Size(D, D),
-                   cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
-
     cv::Mat minimap_bgr;
-    cv::cvtColor(minimap_patch, minimap_bgr, cv::COLOR_GRAY2BGR);
+    cv::warpAffine(m_trajectory_map, minimap_bgr, M, cv::Size(D, D),
+                   cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
 
     // Alpha blending: 70% minimap, 30% background video
     cv::Mat roi = displayFrame(cv::Rect(roi_x, roi_y, D, D));

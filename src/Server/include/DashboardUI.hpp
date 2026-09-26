@@ -44,6 +44,12 @@ private:
 
     // Capture feedback
     std::chrono::steady_clock::time_point m_last_capture_trigger_time{};
+
+    // Trajectory tracking on minimap
+    cv::Mat m_trajectory_map;
+    bool m_prev_record_state = false;
+    bool m_has_prev_pos = false;
+    cv::Point m_prev_map_pt{0, 0};
 };
 
 #endif
